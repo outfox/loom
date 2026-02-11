@@ -12,7 +12,7 @@ from itertools import product
 
 # Readable alphabet: no 0/O, 1/l/I confusion
 # noinspection SpellCheckingInspection
-ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # 30 chars
+ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # 31 chars
 
 
 class IDGenerator:
@@ -33,9 +33,15 @@ class IDGenerator:
     def __init__(self, length: int = 3, seed: int | None = None):
         """
         Args:
-            length: Number of characters per ID (3 = 27k IDs, 4 = 810k IDs)
+            length: Number of characters per ID (3 = 29,791 IDs, 4 = 923,521 IDs)
             seed: Random seed for reproducible shuffling (mainly for tests)
+        
+        Raises:
+            ValueError: If length is not a positive integer.
         """
+        if not isinstance(length, int) or length <= 0:
+            raise ValueError(f"length must be a positive integer, got {length!r}")
+        
         self.length = length
         
         # Generate all possible combinations

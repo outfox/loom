@@ -147,7 +147,6 @@ class TestEntryRelease:
 
         ctx = Context("test")
         entry = ctx.convo.add("Remove me")
-        old_id = entry.id
         remaining_before = _generator.remaining
 
         ctx.redact(entry)

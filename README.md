@@ -51,7 +51,7 @@ Context is organized into sections, compiled in this order:
 
 The section order isn't arbitrary — it's optimized for **LLM prefix caching**:
 
-```
+```text
 ┌─────────────────────────────────┐
 │ FOUNDATION (stable)             │  ← Cached
 │ FOCUS (relatively stable)       │  ← Cached  
