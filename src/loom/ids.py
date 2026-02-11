@@ -11,6 +11,7 @@ import random
 from itertools import product
 
 # Readable alphabet: no 0/O, 1/l/I confusion
+# noinspection SpellCheckingInspection
 ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # 30 chars
 
 

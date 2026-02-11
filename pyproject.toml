@@ -19,6 +19,9 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
+dependencies = [
+    "pytest>=9.0.2",
+]
 
 [project.urls]
 Homepage = "https://github.com/outfox/loom"
