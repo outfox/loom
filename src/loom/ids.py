@@ -55,6 +55,10 @@ class IDGenerator:
             )
         return self._pool.pop()
 
+    def release(self, entry_id: str) -> None:
+        """Return an ID to the pool for reuse."""
+        self._pool.append(entry_id)
+
     @property
     def remaining(self) -> int:
         """Number of IDs still available."""
@@ -71,6 +75,13 @@ def generate_id() -> str:
     if _generator is None:
         _generator = IDGenerator()
     return _generator.next()
+
+
+def release_id(entry_id: str) -> None:
+    """Return an ID to the global pool for reuse."""
+    global _generator
+    if _generator is not None:
+        _generator.release(entry_id)
 
 
 def reset_generator(seed: int | None = None, length: int = 3) -> None:

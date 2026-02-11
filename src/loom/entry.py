@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from loom.ids import generate_id
+from loom.ids import generate_id, release_id
 
 
 class Entry(ABC):
@@ -40,6 +40,12 @@ class Entry(ABC):
         Entries with the same identity are considered duplicates.
         """
         ...
+
+    def release(self) -> None:
+        """Release this entry's ID back to the pool for reuse."""
+        if self.id:
+            release_id(self.id)
+            self.id = None
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Entry):

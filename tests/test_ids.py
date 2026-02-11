@@ -2,6 +2,7 @@
 
 import pytest
 from loom import IDGenerator, reset_generator, generate_id
+from loom.ids import release_id
 
 
 class TestIDGenerator:
@@ -75,6 +76,30 @@ class TestIDGenerator:
         ids2 = [gen2.next() for _ in range(10)]
         
         assert ids1 != ids2
+
+
+class TestIDRelease:
+    """Tests for ID recycling."""
+
+    def test_release_returns_id_to_pool(self):
+        gen = IDGenerator(length=3, seed=42)
+        initial_remaining = gen.remaining
+
+        id1 = gen.next()
+        assert gen.remaining == initial_remaining - 1
+
+        gen.release(id1)
+        assert gen.remaining == initial_remaining
+
+    def test_released_id_can_be_reused(self):
+        gen = IDGenerator(length=3, seed=42)
+
+        id1 = gen.next()
+        gen.release(id1)
+
+        # Released ID goes to end of pool, will be next
+        id2 = gen.next()
+        assert id2 == id1
 
 
 class TestGlobalGenerator:

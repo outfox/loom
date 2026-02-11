@@ -120,3 +120,63 @@ class TestRedactByID:
         result = ctx.compile()
         assert "[REDACTED]" in result
         assert "Sensitive data" not in result
+
+
+class TestEntryRelease:
+    """Tests for Entry ID release and recycling."""
+
+    def setup_method(self):
+        reset_generator(seed=42)
+
+    def test_entry_release_clears_id(self):
+        entry = StringEntry("Test")
+        old_id = entry.id
+        assert old_id is not None
+
+        entry.release()
+        assert entry.id is None
+
+    def test_entry_release_is_idempotent(self):
+        entry = StringEntry("Test")
+        entry.release()
+        entry.release()  # Should not raise
+        assert entry.id is None
+
+    def test_redact_releases_id(self):
+        from loom.ids import _generator
+
+        ctx = Context("test")
+        entry = ctx.convo.add("Remove me")
+        old_id = entry.id
+        remaining_before = _generator.remaining
+
+        ctx.redact(entry)
+
+        assert entry.id is None
+        assert _generator.remaining == remaining_before + 1
+
+    def test_redact_with_tombstone_releases_old_id(self):
+        ctx = Context("test")
+        entry = ctx.convo.add("Remove me")
+
+        ctx.redact(entry, tombstone="[GONE]")
+
+        # Old entry's ID is released (set to None)
+        assert entry.id is None
+        # Tombstone entry exists and has an ID
+        tombstone_entry = ctx.convo.entries[0]
+        assert tombstone_entry.id is not None
+        assert tombstone_entry.compile() == "[GONE]"
+
+    def test_section_clear_releases_ids(self):
+        from loom.ids import _generator
+
+        ctx = Context("test")
+        entries = [ctx.step.add(f"Entry {i}") for i in range(10)]
+        remaining_before = _generator.remaining
+
+        ctx.step.clear()
+
+        assert _generator.remaining == remaining_before + 10
+        for entry in entries:
+            assert entry.id is None

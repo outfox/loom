@@ -34,7 +34,9 @@ class Section:
         return entry
 
     def clear(self) -> None:
-        """Remove all entries from this section."""
+        """Remove all entries from this section, releasing their IDs."""
+        for entry in self.entries:
+            entry.release()
         self.entries.clear()
 
     def compile(self, seen: set[str] | None = None) -> str:
@@ -321,11 +323,13 @@ class Context:
             if entry in section.entries:
                 idx = section.entries.index(entry)
                 if tombstone is not None:
-                    # Replace with tombstone
+                    # Replace with tombstone - release old entry's ID
+                    entry.release()
                     section.entries[idx] = StringEntry(tombstone, name=entry.name)
                 else:
-                    # Complete removal
+                    # Complete removal - release ID back to pool
                     section.entries.remove(entry)
+                    entry.release()
                 return True
 
         return False
