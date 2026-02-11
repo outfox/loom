@@ -125,3 +125,73 @@ class TestRemember:
 
         assert isinstance(entry, StringEntry)
         assert entry in ctx.convo.entries
+
+
+class TestRedact:
+    """Tests for Context.redact() - removing entries from context."""
+
+    def test_redact_removes_entry(self):
+        ctx = Context("test")
+        entry = ctx.convo.add("Sensitive information")
+
+        result = ctx.redact(entry)
+
+        assert result is True
+        assert entry not in ctx.convo.entries
+        assert len(ctx.convo.entries) == 0
+
+    def test_redact_with_tombstone(self):
+        ctx = Context("test")
+        entry = ctx.convo.add("Credit card: 4532-xxxx-1234")
+        entry.name = "User message"
+
+        ctx.redact(entry, tombstone="[REDACTED: contained PII]")
+
+        # Entry replaced, not removed
+        assert len(ctx.convo.entries) == 1
+        result = ctx.compile()
+        assert "[REDACTED: contained PII]" in result
+        assert "4532" not in result
+
+    def test_redact_preserves_entry_name_in_tombstone(self):
+        ctx = Context("test")
+        entry = ctx.foundation.add("Secret config")
+        entry.name = "config.yaml"
+
+        ctx.redact(entry, tombstone="[REDACTED]")
+
+        # Tombstone should keep the name for context
+        result = ctx.compile()
+        assert "config.yaml" in result
+        assert "[REDACTED]" in result
+
+    def test_redact_searches_all_sections(self):
+        ctx = Context("test")
+
+        # Add to different sections
+        e1 = ctx.foundation.add("Foundation entry")
+        e2 = ctx.focus.add("Focus entry")
+        e3 = ctx.topic.add("Topic entry")
+        e4 = ctx.convo.add("Convo entry")
+        e5 = ctx.step.add("Step entry")
+        e6 = ctx.attention.add("Attention entry")
+
+        # Redact from each
+        assert ctx.redact(e1) is True
+        assert ctx.redact(e2) is True
+        assert ctx.redact(e3) is True
+        assert ctx.redact(e4) is True
+        assert ctx.redact(e5) is True
+        assert ctx.redact(e6) is True
+
+        # All gone
+        result = ctx.compile()
+        assert result == ""
+
+    def test_redact_nonexistent_returns_false(self):
+        ctx = Context("test")
+        entry = StringEntry("Not in context")
+
+        result = ctx.redact(entry)
+
+        assert result is False

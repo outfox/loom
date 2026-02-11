@@ -223,6 +223,56 @@ class Context:
         self.convo.add(entry)
         return entry
 
+    def redact(
+        self,
+        entry: Entry,
+        *,
+        tombstone: str | None = None,
+    ) -> bool:
+        """
+        Remove an entry from the context.
+
+        Searches all sections for the entry and removes it. Optionally
+        replaces it with a tombstone marker.
+
+        Args:
+            entry: The entry to remove.
+            tombstone: If provided, replace the entry with this string instead
+                       of removing it completely. Useful for preserving context
+                       about why something was removed.
+
+        Returns:
+            True if the entry was found and removed, False otherwise.
+
+        Example:
+            # Complete removal
+            context.redact(bad_entry)
+
+            # Leave a marker
+            context.redact(pii_entry, tombstone="[REDACTED: contained PII]")
+        """
+        sections = [
+            self.foundation,
+            self.focus,
+            self.topic,
+            self.convo,
+            self.step,
+            self.attention,
+        ]
+
+        for section in sections:
+            if entry in section.entries:
+                idx = section.entries.index(entry)
+                if tombstone is not None:
+                    # Replace with tombstone
+                    section.entries[idx] = StringEntry(tombstone, name=entry.name)
+                else:
+                    # Complete removal
+                    section.entries.remove(entry)
+                return True
+
+        return False
+
     def compact(self, compactor: Compactor) -> str:
         """
         Compact this context using the given compactor.
