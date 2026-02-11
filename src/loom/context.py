@@ -220,7 +220,7 @@ class Context:
         elif isinstance(entry, Path):
             entry = FileEntry(entry)
         elif summarize and isinstance(entry, StringEntry):
-            entry = StringEntry(f"Learned: {entry.content}")
+            entry = StringEntry(f"Learned: {entry.compile()}")
 
         self.convo.add(entry)
         return entry
