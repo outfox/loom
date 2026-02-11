@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
 
 from loom.compactor import Compactor
 from loom.entry import Entry, FileEntry, StringEntry
@@ -223,9 +223,65 @@ class Context:
         self.convo.add(entry)
         return entry
 
+    def _all_sections(self) -> list[Section]:
+        """Return all sections in compilation order."""
+        return [
+            self.foundation,
+            self.focus,
+            self.topic,
+            self.convo,
+            self.step,
+            self.attention,
+        ]
+
+    def entries(self, section: str | None = None) -> Iterator[Entry]:
+        """
+        Iterate over all entries in this context.
+
+        Args:
+            section: If provided, only yield entries from that section.
+                     Use section names like "convo", "foundation", etc.
+
+        Yields:
+            Entry objects in section order.
+
+        Example:
+            # List all convo entries
+            for entry in context.entries("convo"):
+                print(f"{entry.id} | {entry.compile()[:50]}")
+        """
+        sections = self._all_sections()
+
+        if section is not None:
+            section_lower = section.lower()
+            sections = [s for s in sections if s.name.lower() == section_lower]
+
+        for sec in sections:
+            yield from sec.entries
+
+    def get(self, entry_id: str) -> Entry | None:
+        """
+        Find an entry by its ID.
+
+        Args:
+            entry_id: The short ID (e.g., "kvm", "axr")
+
+        Returns:
+            The Entry if found, None otherwise.
+
+        Example:
+            entry = context.get("kvm")
+            if entry:
+                context.redact(entry)
+        """
+        for entry in self.entries():
+            if entry.id == entry_id:
+                return entry
+        return None
+
     def redact(
         self,
-        entry: Entry,
+        entry: Entry | str,
         *,
         tombstone: str | None = None,
     ) -> bool:
@@ -236,7 +292,7 @@ class Context:
         replaces it with a tombstone marker.
 
         Args:
-            entry: The entry to remove.
+            entry: The entry to remove, or its ID string.
             tombstone: If provided, replace the entry with this string instead
                        of removing it completely. Useful for preserving context
                        about why something was removed.
@@ -248,19 +304,20 @@ class Context:
             # Complete removal
             context.redact(bad_entry)
 
+            # By ID
+            context.redact("kvm")
+
             # Leave a marker
             context.redact(pii_entry, tombstone="[REDACTED: contained PII]")
         """
-        sections = [
-            self.foundation,
-            self.focus,
-            self.topic,
-            self.convo,
-            self.step,
-            self.attention,
-        ]
+        # Resolve ID to Entry if needed
+        if isinstance(entry, str):
+            resolved = self.get(entry)
+            if resolved is None:
+                return False
+            entry = resolved
 
-        for section in sections:
+        for section in self._all_sections():
             if entry in section.entries:
                 idx = section.entries.index(entry)
                 if tombstone is not None:

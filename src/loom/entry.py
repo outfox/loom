@@ -8,8 +8,11 @@ metadata for deduplication and formatting.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+from loom.ids import generate_id
 
 
 class Entry(ABC):
@@ -22,6 +25,8 @@ class Entry(ABC):
                   Used for deduplication and section headers.
         """
         self.name = name
+        self.id = generate_id()
+        self.created_at = datetime.now(timezone.utc)
 
     @abstractmethod
     def compile(self) -> str:
