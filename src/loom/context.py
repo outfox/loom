@@ -189,6 +189,40 @@ class Context:
 
         return "\n\n".join(parts)
 
+    def remember(self, entry: Entry | str | Path, *, summarize: bool = False) -> Entry:
+        """
+        Promote an entry to CONVO for long-term retention.
+
+        Use this when something from the current step (or elsewhere) is important
+        enough to remember beyond the current turn. This is how volatile work
+        becomes persistent knowledge.
+
+        Args:
+            entry: The entry to remember. Strings and Paths are auto-wrapped.
+            summarize: If True, prefix with "Learned: " (future: could use LLM).
+
+        Returns:
+            The entry that was added to CONVO.
+
+        Example:
+            # After an important tool call
+            result = step.entries[-1]
+            context.remember(result)
+
+            # Or with a summary
+            context.remember(f"The API returns {format}", summarize=True)
+        """
+        if isinstance(entry, str):
+            content = f"Learned: {entry}" if summarize else entry
+            entry = StringEntry(content)
+        elif isinstance(entry, Path):
+            entry = FileEntry(entry)
+        elif summarize and isinstance(entry, StringEntry):
+            entry = StringEntry(f"Learned: {entry.content}")
+
+        self.convo.add(entry)
+        return entry
+
     def compact(self, compactor: Compactor) -> str:
         """
         Compact this context using the given compactor.

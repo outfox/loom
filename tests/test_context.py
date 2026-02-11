@@ -81,3 +81,47 @@ class TestContext:
 
         # Should only appear once
         assert result.count("Shared rule") == 1
+
+
+class TestRemember:
+    """Tests for Context.remember() - promoting entries to CONVO."""
+
+    def test_remember_string(self):
+        ctx = Context("test")
+        ctx.remember("Important finding")
+
+        assert len(ctx.convo.entries) == 1
+        result = ctx.compile()
+        assert "Important finding" in result
+
+    def test_remember_with_summarize(self):
+        ctx = Context("test")
+        ctx.remember("API returns JSON", summarize=True)
+
+        result = ctx.compile()
+        assert "Learned: API returns JSON" in result
+
+    def test_remember_entry_from_step(self):
+        ctx = Context("test")
+
+        # Simulate a tool call in step
+        ctx.step.add("$ gh pr list\n#1 Initial structure OPEN")
+        step_entry = ctx.step.entries[-1]
+
+        # Remember it before compile clears step
+        ctx.remember(step_entry)
+
+        # Compile clears step
+        ctx.compile(clear_volatile=True)
+
+        # But convo still has it
+        assert len(ctx.convo.entries) == 1
+        result = ctx.compile()
+        assert "gh pr list" in result
+
+    def test_remember_returns_entry(self):
+        ctx = Context("test")
+        entry = ctx.remember("Something important")
+
+        assert isinstance(entry, StringEntry)
+        assert entry in ctx.convo.entries
