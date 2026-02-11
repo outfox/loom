@@ -126,6 +126,8 @@ class Context:
 
     def include(self, visitor: Context) -> None:
         """Add a visitor context to be interleaved during compilation."""
+        if visitor is self:
+            raise ValueError("Cannot include a Context as its own visitor")
         if visitor not in self._visitors:
             self._visitors.append(visitor)
 
@@ -320,17 +322,17 @@ class Context:
             entry = resolved
 
         for section in self._all_sections():
-            if entry in section.entries:
-                idx = section.entries.index(entry)
-                if tombstone is not None:
-                    # Replace with tombstone - release old entry's ID
-                    entry.release()
-                    section.entries[idx] = StringEntry(tombstone, name=entry.name)
-                else:
-                    # Complete removal - release ID back to pool
-                    section.entries.remove(entry)
-                    entry.release()
-                return True
+            for i, e in enumerate(section.entries):
+                if e is entry:
+                    if tombstone is not None:
+                        # Replace with tombstone - release old entry's ID
+                        entry.release()
+                        section.entries[i] = StringEntry(tombstone, name=entry.name)
+                    else:
+                        # Complete removal - release ID back to pool
+                        del section.entries[i]
+                        entry.release()
+                    return True
 
         return False
 
