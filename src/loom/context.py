@@ -221,8 +221,10 @@ class Context:
             entry = StringEntry(content)
         elif isinstance(entry, Path):
             entry = FileEntry(entry)
-        elif summarize and isinstance(entry, StringEntry):
-            entry = StringEntry(f"Learned: {entry.compile()}", name=entry.name)
+
+        # If summarizing, compile any Entry type into a summarized StringEntry
+        if summarize and isinstance(entry, Entry):
+            entry = StringEntry(f"Learned: {entry.compile()}", name=getattr(entry, "name", None))
 
         self.convo.add(entry)
         return entry
