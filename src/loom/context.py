@@ -50,15 +50,14 @@ class Section:
         Returns:
             Compiled string with prefix/postfix if section has content.
         """
-        if seen is None:
-            seen = set()
-
         parts: list[str] = []
         for entry in self.entries:
-            identity = entry.identity()
-            if identity in seen:
-                continue
-            seen.add(identity)
+            # Only perform deduplication if seen is provided
+            if seen is not None:
+                identity = entry.identity()
+                if identity in seen:
+                    continue
+                seen.add(identity)
 
             compiled = entry.compile()
             if entry.name:
@@ -217,14 +216,21 @@ class Context:
             context.remember(f"The API returns {format}", summarize=True)
         """
         if isinstance(entry, str):
-            content = f"Learned: {entry}" if summarize else entry
-            entry = StringEntry(content)
+            # Don't add "Learned:" prefix here if summarize=True,
+            # because the summarize block below will add it
+            entry = StringEntry(entry)
         elif isinstance(entry, Path):
             entry = FileEntry(entry)
 
         # If summarizing, compile any Entry type into a summarized StringEntry
         if summarize and isinstance(entry, Entry):
-            entry = StringEntry(f"Learned: {entry.compile()}", name=getattr(entry, "name", None))
+            compiled = entry.compile()
+            # Avoid double "Learned:" prefix
+            if compiled.startswith("Learned: "):
+                content = compiled
+            else:
+                content = f"Learned: {compiled}"
+            entry = StringEntry(content, name=getattr(entry, "name", None))
 
         self.convo.add(entry)
         return entry
