@@ -232,6 +232,13 @@ class Context:
                 content = f"Learned: {compiled}"
             entry = StringEntry(content, name=getattr(entry, "name", None))
 
+        # If the entry exists in STEP, move it (remove without releasing ID)
+        # to avoid sharing the same object between STEP and CONVO.
+        # This prevents compile(clear_volatile=True) from releasing the ID
+        # of an entry that's still in CONVO.
+        if entry in self.step.entries:
+            self.step.entries.remove(entry)
+
         self.convo.add(entry)
         return entry
 
