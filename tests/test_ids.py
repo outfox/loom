@@ -2,27 +2,32 @@
 
 import pytest
 from loom import IDGenerator, reset_generator, create_entry_id
-from loom.ids import release_id
+from loom.ids import release_id, ALPHABET
 
 
 class TestIDGenerator:
+    def test_requires_explicit_length(self):
+        """IDGenerator requires explicit length - no magic defaults."""
+        with pytest.raises(TypeError):
+            IDGenerator(seed=42)  # Missing required 'length'
+
     def test_generates_unique_ids(self):
-        gen = IDGenerator(seed=42)
+        gen = IDGenerator(length=3, seed=42)
         ids = [gen.next() for _ in range(100)]
         
         assert len(ids) == len(set(ids))  # All unique
 
     def test_ids_are_correct_length(self):
         gen = IDGenerator(length=3, seed=42)
-        id = gen.next()
-        assert len(id) == 3
+        id3 = gen.next()
+        assert len(id3) == 3
 
         gen4 = IDGenerator(length=4, seed=42)
         id4 = gen4.next()
         assert len(id4) == 4
 
     def test_ids_use_readable_alphabet(self):
-        gen = IDGenerator(seed=42)
+        gen = IDGenerator(length=3, seed=42)
         
         # Generate many IDs and check characters
         for _ in range(1000):
@@ -31,10 +36,10 @@ class TestIDGenerator:
                 # No confusing characters
                 assert char not in "01ilo"
                 # Only valid chars
-                assert char in "abcdefghjkmnpqrstuvwxyz23456789"
+                assert char in ALPHABET
 
     def test_ids_appear_scrambled(self):
-        gen = IDGenerator(seed=42)
+        gen = IDGenerator(length=3, seed=42)
         
         # First few IDs should not be alphabetically sorted
         ids = [gen.next() for _ in range(10)]
@@ -44,7 +49,7 @@ class TestIDGenerator:
         gen = IDGenerator(length=3, seed=42)
         initial = gen.remaining
         
-        assert initial == 31 ** 3  # 29791
+        assert initial == len(ALPHABET) ** 3  # 31^3 = 29791
         
         gen.next()
         assert gen.remaining == initial - 1
@@ -53,15 +58,15 @@ class TestIDGenerator:
         gen = IDGenerator(length=1, seed=42)  # Only 31 IDs
         
         # Use all IDs
-        for _ in range(31):
+        for _ in range(len(ALPHABET)):
             gen.next()
         
         with pytest.raises(RuntimeError, match="exhausted"):
             gen.next()
 
     def test_seed_makes_reproducible(self):
-        gen1 = IDGenerator(seed=123)
-        gen2 = IDGenerator(seed=123)
+        gen1 = IDGenerator(length=3, seed=123)
+        gen2 = IDGenerator(length=3, seed=123)
         
         ids1 = [gen1.next() for _ in range(10)]
         ids2 = [gen2.next() for _ in range(10)]
@@ -69,8 +74,8 @@ class TestIDGenerator:
         assert ids1 == ids2
 
     def test_different_seeds_different_order(self):
-        gen1 = IDGenerator(seed=1)
-        gen2 = IDGenerator(seed=2)
+        gen1 = IDGenerator(length=3, seed=1)
+        gen2 = IDGenerator(length=3, seed=2)
         
         ids1 = [gen1.next() for _ in range(10)]
         ids2 = [gen2.next() for _ in range(10)]
@@ -104,20 +109,20 @@ class TestIDRelease:
 
 class TestGlobalGenerator:
     def test_generate_id_works(self):
-        reset_generator(seed=42)
+        reset_generator(seed=42, length=4)
         
         id1 = create_entry_id()
         id2 = create_entry_id()
         
         assert id1 != id2
-        assert len(id1) == 3
-        assert len(id2) == 3
+        assert len(id1) == 4
+        assert len(id2) == 4
 
     def test_reset_generator(self):
-        reset_generator(seed=42)
+        reset_generator(seed=42, length=4)
         id1 = create_entry_id()
         
-        reset_generator(seed=42)
+        reset_generator(seed=42, length=4)
         id2 = create_entry_id()
         
         assert id1 == id2  # Same seed = same first ID

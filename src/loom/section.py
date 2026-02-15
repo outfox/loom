@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from loom import Entry, StringEntry, FileEntry
+from loom.entry import Entry, StringEntry, FileEntry
 
 
 @dataclass
