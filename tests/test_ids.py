@@ -109,20 +109,20 @@ class TestIDRelease:
 
 class TestGlobalGenerator:
     def test_generate_id_works(self):
-        reset_generator(seed=42, length=4)
+        reset_generator(seed=42, length=2)
         
         id1 = create_entry_id()
         id2 = create_entry_id()
         
         assert id1 != id2
-        assert len(id1) == 4
-        assert len(id2) == 4
+        assert len(id1) == 2
+        assert len(id2) == 2
 
     def test_reset_generator(self):
-        reset_generator(seed=42, length=4)
+        reset_generator(seed=42, length=2)
         id1 = create_entry_id()
         
-        reset_generator(seed=42, length=4)
+        reset_generator(seed=42, length=2)
         id2 = create_entry_id()
         
         assert id1 == id2  # Same seed = same first ID

@@ -1,7 +1,14 @@
 """Basic tests for Context."""
 
 import pytest
-from loom import Context, StringEntry
+from loom import Context, StringEntry, reset_generator, reset_context_generator
+
+
+@pytest.fixture(autouse=True)
+def fast_generators():
+    """Use short IDs for fast tests."""
+    reset_generator(seed=42, length=2)
+    reset_context_generator(seed=42, length=2)
 
 
 class TestContext:

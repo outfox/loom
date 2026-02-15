@@ -8,13 +8,13 @@ from loom import StringEntry, FileEntry, Context, reset_generator
 
 class TestEntryID:
     def setup_method(self):
-        # Reset generator for reproducible tests (4-char entry IDs)
-        reset_generator(seed=42, length=4)
+        # Reset generator for reproducible tests (2-char for fast tests)
+        reset_generator(seed=42, length=2)
 
     def test_entry_has_id(self):
         entry = StringEntry("Hello")
         assert hasattr(entry, "id")
-        assert len(entry.id) == 4
+        assert len(entry.id) == 2
 
     def test_entry_has_created_at(self):
         before = datetime.now(timezone.utc)
@@ -35,13 +35,13 @@ class TestEntryID:
         test_file.write_text("content")
         
         entry = FileEntry(test_file)
-        assert len(entry.id) == 4
+        assert len(entry.id) == 2
         assert entry.created_at is not None
 
 
 class TestContextEntries:
     def setup_method(self):
-        reset_generator(seed=42, length=4)
+        reset_generator(seed=42, length=2)
 
     def test_entries_iterates_all(self):
         ctx = Context("test")
@@ -90,7 +90,7 @@ class TestContextEntries:
 
 class TestRedactByID:
     def setup_method(self):
-        reset_generator(seed=42, length=4)
+        reset_generator(seed=42, length=2)
 
     def test_redact_by_id_string(self):
         ctx = Context("test")
@@ -126,7 +126,7 @@ class TestEntryRelease:
     """Tests for Entry ID release and recycling."""
 
     def setup_method(self):
-        reset_generator(seed=42, length=4)
+        reset_generator(seed=42, length=2)
 
     def test_entry_release_clears_id(self):
         entry = StringEntry("Test")

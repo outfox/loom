@@ -1,22 +1,23 @@
 """Tests for Context IDs."""
 
 import pytest
-from loom import Context, reset_context_generator
+from loom import Context, reset_context_generator, reset_generator
 
 
 class TestContextID:
     """Test that contexts get unique IDs."""
 
     def setup_method(self):
-        """Reset generator for reproducible tests."""
-        reset_context_generator(seed=42)
+        """Reset generators for reproducible tests (length=2 for speed)."""
+        reset_context_generator(seed=42, length=2)
+        reset_generator(seed=42, length=2)
 
     def test_context_has_id(self):
         """Context should have an ID on creation."""
         ctx = Context("test")
         assert ctx.id is not None
         assert isinstance(ctx.id, str)
-        assert len(ctx.id) == 3
+        assert len(ctx.id) == 2
 
     def test_context_ids_are_unique(self):
         """Each context should get a unique ID."""
