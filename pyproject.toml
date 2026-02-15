@@ -1,0 +1,57 @@
+[project]
+name = "context-loom"
+version = "0.1.0"
+description = "Weave context for LLM agents"
+readme = "README.md"
+license = "AGPL-3.0-or-later"
+requires-python = ">=3.10"
+authors = [
+    { name = "Tiger", email = "tiger@tiger.blue" },
+    { name = "Blue Duval", email = "blue@tiger.blue" },
+]
+keywords = ["llm", "context", "agents", "ai"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "pytest>=9.0.2",
+]
+
+[project.urls]
+Homepage = "https://github.com/outfox/loom"
+Repository = "https://github.com/outfox/loom.git"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.15.0",
+    "mypy>=1.19.1",
+]
+
+[build-system]
+requires = ["setuptools>=82.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
