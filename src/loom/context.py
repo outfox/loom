@@ -304,5 +304,59 @@ class Context:
         """
         return compactor.compact(self)
 
+    def render(self, *, clear_volatile: bool = True) -> str:
+        """
+        Render the context to a string for LLM consumption.
+
+        This is the primary public API for getting the compiled context.
+        It's a convenience wrapper around compile() with sensible defaults.
+
+        Args:
+            clear_volatile: If True (default), clear the step section after rendering.
+
+        Returns:
+            The fully rendered context string, ready for use as a system prompt.
+
+        Example:
+            ctx = Context("main")
+            ctx.foundation.add(StringEntry("You are a helpful assistant."))
+            ctx.topic.add(FileEntry("project/README.md"))
+
+            system_prompt = ctx.render()
+            # Use system_prompt in your LLM API call
+        """
+        return self.compile(clear_volatile=clear_volatile)
+
+    def to_messages(
+        self,
+        *,
+        clear_volatile: bool = True,
+    ) -> list[dict[str, str]]:
+        """
+        Render the context as a list of messages for chat APIs.
+
+        Returns a list suitable for OpenAI/Anthropic-style chat completions.
+        The system prompt is the first message, followed by any conversation
+        history from the convo section (if entries have role metadata).
+
+        Args:
+            clear_volatile: If True (default), clear the step section after rendering.
+
+        Returns:
+            List of message dicts with 'role' and 'content' keys.
+
+        Example:
+            ctx = Context("main")
+            ctx.foundation.add(StringEntry("You are Blue, a helpful AI."))
+
+            messages = ctx.to_messages()
+            # [{"role": "system", "content": "..."}]
+
+            # Use with OpenAI:
+            # client.chat.completions.create(messages=messages, ...)
+        """
+        system_content = self.compile(clear_volatile=clear_volatile)
+        return [{"role": "system", "content": system_content}]
+
     def __repr__(self) -> str:
         return f"Context({self.id!r}, {self.name!r}, visitors={len(self._visitors)})"
