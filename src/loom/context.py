@@ -330,33 +330,122 @@ class Context:
     def to_messages(
         self,
         *,
+        cache_breakpoints: list[str] | None = None,
         clear_volatile: bool = True,
-    ) -> list[dict[str, str]]:
+    ) -> list[dict]:
         """
         Render the context as a list of messages for chat APIs.
 
         Returns a list suitable for OpenAI/Anthropic-style chat completions.
-        The system prompt is the first message, followed by any conversation
-        history from the convo section (if entries have role metadata).
+        Supports Anthropic's prompt caching via cache_breakpoints.
 
         Args:
+            cache_breakpoints: List of section names after which to set cache
+                breakpoints. Valid names: "foundation", "focus", "topic", "convo",
+                "step", "attention". Max 4 breakpoints recommended (Anthropic limit).
+                Example: ["foundation", "topic"] caches foundation and everything
+                up to and including topic.
             clear_volatile: If True (default), clear the step section after rendering.
 
         Returns:
-            List of message dicts with 'role' and 'content' keys.
+            List of message dicts. Without cache_breakpoints, returns simple format:
+            [{"role": "system", "content": "..."}]
+
+            With cache_breakpoints, returns Anthropic's multi-block format:
+            [{"role": "system", "content": [
+                {"type": "text", "text": "...", "cache_control": {"type": "ephemeral"}},
+                {"type": "text", "text": "..."},
+                ...
+            ]}]
 
         Example:
             ctx = Context("main")
             ctx.foundation.add(StringEntry("You are Blue, a helpful AI."))
+            ctx.topic.add(StringEntry("Current task: help with Python"))
 
+            # Simple format (OpenAI-compatible)
             messages = ctx.to_messages()
-            # [{"role": "system", "content": "..."}]
 
-            # Use with OpenAI:
-            # client.chat.completions.create(messages=messages, ...)
+            # With caching (Anthropic-optimized)
+            messages = ctx.to_messages(cache_breakpoints=["foundation", "topic"])
         """
-        system_content = self.compile(clear_volatile=clear_volatile)
-        return [{"role": "system", "content": system_content}]
+        if cache_breakpoints is None:
+            # Simple format - just compile everything
+            system_content = self.compile(clear_volatile=clear_volatile)
+            return [{"role": "system", "content": system_content}]
+
+        # Multi-block format with cache breakpoints
+        cache_set = {name.lower() for name in cache_breakpoints}
+        seen: set[str] = set()
+        content_blocks: list[dict] = []
+
+        # Helper to add a content block
+        def add_block(text: str, section_name: str) -> None:
+            if not text.strip():
+                return
+            block: dict = {"type": "text", "text": text}
+            if section_name.lower() in cache_set:
+                block["cache_control"] = {"type": "ephemeral"}
+            content_blocks.append(block)
+
+        # FOUNDATION: self first, then visitors
+        foundation_parts = []
+        if content := self.foundation.compile(seen):
+            foundation_parts.append(content)
+        for visitor in self._visitors:
+            if content := visitor.foundation.compile(seen):
+                foundation_parts.append(f"># {visitor.name} (visitor)\n{content}")
+        if foundation_parts:
+            add_block("\n\n".join(foundation_parts), "foundation")
+
+        # FOCUS: visitors first, then self
+        focus_parts = []
+        for visitor in self._visitors:
+            if content := visitor.focus.compile(seen):
+                focus_parts.append(f"># Focus from {visitor.name}\n{content}")
+        if content := self.focus.compile(seen):
+            focus_parts.append(content)
+        if focus_parts:
+            add_block("\n\n".join(focus_parts), "focus")
+
+        # TOPIC: self first, then visitors
+        topic_parts = []
+        if content := self.topic.compile(seen):
+            topic_parts.append(content)
+        for visitor in self._visitors:
+            if content := visitor.topic.compile(seen):
+                topic_parts.append(f"># Topic from {visitor.name}\n{content}")
+        if topic_parts:
+            add_block("\n\n".join(topic_parts), "topic")
+
+        # CONVO: visitors then self
+        convo_parts = []
+        for visitor in self._visitors:
+            if content := visitor.convo.compile(seen):
+                convo_parts.append(f"># Conversation from {visitor.name}\n{content}")
+        if content := self.convo.compile(seen):
+            convo_parts.append(content)
+        if convo_parts:
+            add_block("\n\n".join(convo_parts), "convo")
+
+        # STEP: self only
+        if content := self.step.compile():  # No dedup for step
+            add_block(content, "step")
+
+        # ATTENTION: visitors then self
+        attention_parts = []
+        for visitor in self._visitors:
+            if content := visitor.attention.compile(seen):
+                attention_parts.append(f"># Attention from {visitor.name}\n{content}")
+        if content := self.attention.compile(seen):
+            attention_parts.append(content)
+        if attention_parts:
+            add_block("\n\n".join(attention_parts), "attention")
+
+        if clear_volatile:
+            self.step.clear()
+
+        return [{"role": "system", "content": content_blocks}]
 
     def __repr__(self) -> str:
         return f"Context({self.id!r}, {self.name!r}, visitors={len(self._visitors)})"
