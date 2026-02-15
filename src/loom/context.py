@@ -12,6 +12,7 @@ from typing import Iterator, Optional
 
 from loom.compactor import Compactor
 from loom.entry import Entry, FileEntry, StringEntry
+from loom.ids import create_context_id
 from loom.section import Section
 
 
@@ -40,6 +41,7 @@ class Context:
             router: LLM endpoint (e.g. litellm model string) this context prefers.
             cwd: Current working directory for file resolution.
         """
+        self.id = create_context_id()
         self.name = name
         self.router = router
         self.cwd = Path(cwd) if cwd else Path.cwd()
@@ -303,4 +305,4 @@ class Context:
         return compactor.compact(self)
 
     def __repr__(self) -> str:
-        return f"Context({self.name!r}, visitors={len(self._visitors)})"
+        return f"Context({self.id!r}, {self.name!r}, visitors={len(self._visitors)})"
