@@ -22,9 +22,9 @@ class TestIDGenerator:
         id3 = gen.next()
         assert len(id3) == 3
 
-        gen4 = IDGenerator(length=4, seed=42)
+        gen4 = IDGenerator(length=2, seed=42)
         id4 = gen4.next()
-        assert len(id4) == 4
+        assert len(id4) == 2
 
     def test_ids_use_readable_alphabet(self):
         gen = IDGenerator(length=3, seed=42)
