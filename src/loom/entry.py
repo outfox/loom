@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from loom.ids import generate_id, release_id
+from loom.ids import create_entry_id, release_id
 
 
 class Entry(ABC):
@@ -25,7 +25,7 @@ class Entry(ABC):
                   Used for deduplication and section headers.
         """
         self.name = name
-        self.id = generate_id()
+        self.id = create_entry_id()
         self.created_at = datetime.now(timezone.utc)
 
     @abstractmethod

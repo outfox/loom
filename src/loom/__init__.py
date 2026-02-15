@@ -8,7 +8,7 @@ context from multiple sources into coherent prompts.
 from loom.compactor import Compactor
 from loom.context import Context
 from loom.entry import Entry, FileEntry, StringEntry
-from loom.ids import IDGenerator, generate_id, reset_generator
+from loom.ids import IDGenerator, create_entry_id, reset_generator
 
 __version__ = "0.1.0"
 __all__ = [
@@ -18,6 +18,6 @@ __all__ = [
     "StringEntry",
     "Compactor",
     "IDGenerator",
-    "generate_id",
+    "create_entry_id",
     "reset_generator",
 ]

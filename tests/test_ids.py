@@ -1,7 +1,7 @@
 """Tests for ID generation."""
 
 import pytest
-from loom import IDGenerator, reset_generator, generate_id
+from loom import IDGenerator, reset_generator, create_entry_id
 from loom.ids import release_id
 
 
@@ -106,8 +106,8 @@ class TestGlobalGenerator:
     def test_generate_id_works(self):
         reset_generator(seed=42)
         
-        id1 = generate_id()
-        id2 = generate_id()
+        id1 = create_entry_id()
+        id2 = create_entry_id()
         
         assert id1 != id2
         assert len(id1) == 3
@@ -115,9 +115,9 @@ class TestGlobalGenerator:
 
     def test_reset_generator(self):
         reset_generator(seed=42)
-        id1 = generate_id()
+        id1 = create_entry_id()
         
         reset_generator(seed=42)
-        id2 = generate_id()
+        id2 = create_entry_id()
         
         assert id1 == id2  # Same seed = same first ID

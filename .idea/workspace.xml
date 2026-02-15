@@ -1,8 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
   <component name="ChangeListManager">
     <list default="true" id="6579dd40-ca3b-43e3-a401-26963c94228b" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/loom/section.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/loom/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/loom/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/loom/context.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/loom/context.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/loom/entry.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/loom/entry.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/loom/ids.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/loom/ids.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_entry_ids.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_entry_ids.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_ids.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_ids.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -31,7 +41,8 @@
     "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
     "RunOnceActivity.git.unshallow": "true",
     "git-widget-placeholder": "initial-structure",
-    "last_opened_file_path": "/home/tiger/Projects/loom",
+    "ignore.virus.scanning.warn.message": "true",
+    "last_opened_file_path": "P:/loom",
     "settings.editor.selected.configurable": "reference.settingsdialog.IDE.editor.colors.Color Scheme Font"
   }
 }]]></component>
@@ -85,5 +96,13 @@
         </entry>
       </map>
     </option>
+  </component>
+  <component name="github-copilot-workspace">
+    <instructionFileLocations>
+      <option value=".github/instructions" />
+    </instructionFileLocations>
+    <promptFileLocations>
+      <option value=".github/prompts" />
+    </promptFileLocations>
   </component>
 </project>

@@ -143,16 +143,16 @@ class TestEntryRelease:
         assert entry.id is None
 
     def test_redact_releases_id(self):
-        from loom.ids import _generator
+        from loom.ids import _generator_entry
 
         ctx = Context("test")
         entry = ctx.convo.add("Remove me")
-        remaining_before = _generator.remaining
+        remaining_before = _generator_entry.remaining
 
         ctx.redact(entry)
 
         assert entry.id is None
-        assert _generator.remaining == remaining_before + 1
+        assert _generator_entry.remaining == remaining_before + 1
 
     def test_redact_with_tombstone_releases_old_id(self):
         ctx = Context("test")
@@ -168,14 +168,14 @@ class TestEntryRelease:
         assert tombstone_entry.compile() == "[GONE]"
 
     def test_section_clear_releases_ids(self):
-        from loom.ids import _generator
+        from loom.ids import _generator_entry
 
         ctx = Context("test")
         entries = [ctx.step.add(f"Entry {i}") for i in range(10)]
-        remaining_before = _generator.remaining
+        remaining_before = _generator_entry.remaining
 
         ctx.step.clear()
 
-        assert _generator.remaining == remaining_before + 10
+        assert _generator_entry.remaining == remaining_before + 10
         for entry in entries:
             assert entry.id is None

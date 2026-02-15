@@ -12,14 +12,14 @@ from itertools import product
 
 # Readable alphabet: no 0/O, 1/l/I confusion
 # noinspection SpellCheckingInspection
-ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # 31 chars
+ALPHABET = "abcdefghjkmnpqrstuvwxyz123456789"  # 32 chars
 
 
 class IDGenerator:
     """
     Generates unique, human-readable IDs.
     
-    IDs are short (default 3 chars) and appear in scrambled order.
+    IDs are short (default 4 chars) and appear in scrambled order.
     The pool is pre-generated and shuffled at instantiation.
     
     Example:
@@ -30,10 +30,10 @@ class IDGenerator:
         'axr'
     """
 
-    def __init__(self, length: int = 3, seed: int | None = None):
+    def __init__(self, length: int = 4, seed: int | None = None):
         """
         Args:
-            length: Number of characters per ID (3 = 29,791 IDs, 4 = 923,521 IDs)
+            length: Number of characters per ID (3 = 32,768 IDs, 4 = 1048,576 IDs)
             seed: Random seed for reproducible shuffling (mainly for tests)
         
         Raises:
@@ -73,25 +73,34 @@ class IDGenerator:
 
 
 # Global generator for the process
-_generator: IDGenerator | None = None
+_generator_context: IDGenerator | None = None
+_generator_entry: IDGenerator | None = None
 
 
-def generate_id() -> str:
+def create_context_id() -> str:
     """Generate a unique ID using the global generator."""
-    global _generator
-    if _generator is None:
-        _generator = IDGenerator()
-    return _generator.next()
+    global _generator_context
+    if _generator_context is None:
+        _generator_context = IDGenerator(3)
+    return _generator_context.next()
+
+
+def create_entry_id() -> str:
+    """Generate a unique ID using the global generator."""
+    global _generator_entry
+    if _generator_entry is None:
+        _generator_entry = IDGenerator(4)
+    return _generator_entry.next()
 
 
 def release_id(entry_id: str) -> None:
     """Return an ID to the global pool for reuse."""
-    global _generator
-    if _generator is not None:
-        _generator.release(entry_id)
+    global _generator_entry
+    if _generator_entry is not None:
+        _generator_entry.release(entry_id)
 
 
 def reset_generator(seed: int | None = None, length: int = 3) -> None:
     """Reset the global generator. Mainly useful for testing."""
-    global _generator
-    _generator = IDGenerator(length=length, seed=seed)
+    global _generator_entry
+    _generator_entry = IDGenerator(length=length, seed=seed)
