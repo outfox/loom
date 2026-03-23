@@ -332,6 +332,7 @@ class Context:
         *,
         cache_breakpoints: list[str] | None = None,
         clear_volatile: bool = True,
+        cache_ttl: int | None = None,
     ) -> list[dict]:
         """
         Render the context as a list of messages for chat APIs.
@@ -346,6 +347,9 @@ class Context:
                 Example: ["foundation", "topic"] caches foundation and everything
                 up to and including topic.
             clear_volatile: If True (default), clear the step section after rendering.
+            cache_ttl: Optional TTL in seconds for Anthropic's prompt cache
+                (``max_age_seconds``). When set, each ``cache_control`` block
+                includes ``{"type": "ephemeral", "max_age_seconds": cache_ttl}``.
 
         Returns:
             List of message dicts. Without cache_breakpoints, returns simple format:
@@ -385,7 +389,10 @@ class Context:
                 return
             block: dict = {"type": "text", "text": text}
             if section_name.lower() in cache_set:
-                block["cache_control"] = {"type": "ephemeral"}
+                cc: dict = {"type": "ephemeral"}
+                if cache_ttl is not None:
+                    cc["max_age_seconds"] = cache_ttl
+                block["cache_control"] = cc
             content_blocks.append(block)
 
         # FOUNDATION: self first, then visitors
