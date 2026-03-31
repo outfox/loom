@@ -575,27 +575,6 @@ class Context:
         content_blocks: list[dict] = []
 
         section_order = ["foundation", "focus", "topic", "convo", "step", "attention"]
-        # Helper to add a content block
-        def add_block(text: str, section_name: str) -> None:
-            if not text.strip():
-                return
-            block: dict = {"type": "text", "text": text}
-            if section_name.lower() in cache_set:
-                cc: dict = {"type": "ephemeral"}
-                if cache_ttl is not None:
-                    cc["max_age_seconds"] = cache_ttl
-                block["cache_control"] = cc
-            content_blocks.append(block)
-
-        # FOUNDATION: self first, then visitors
-        foundation_parts = []
-        if content := self.foundation.compile(seen):
-            foundation_parts.append(content)
-        for visitor in self._visitors:
-            if content := visitor.foundation.compile(seen):
-                foundation_parts.append(f"># {visitor.name} (visitor)\n{content}")
-        if foundation_parts:
-            add_block("\n\n".join(foundation_parts), "foundation")
 
         for section_name in section_order:
             if section_name == "step":
