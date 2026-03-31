@@ -34,7 +34,16 @@ class Section:
     @property
     def has_multimodal(self) -> bool:
         """Check whether this section contains any multimodal entries."""
-        return any(entry.content_blocks() is not None for entry in self.entries)
+        return self.has_multimodal_for()
+
+    def has_multimodal_for(self, exclude_roles: set[str] | None = None) -> bool:
+        """Check whether this section contains multimodal entries, respecting role exclusions."""
+        for entry in self.entries:
+            if exclude_roles and entry.role in exclude_roles:
+                continue
+            if entry.content_blocks() is not None:
+                return True
+        return False
 
     def compile(self, seen: set[str] | None = None, exclude_roles: set[str] | None = None) -> str:
         """
