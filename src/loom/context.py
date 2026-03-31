@@ -458,15 +458,17 @@ class Context:
     ) -> None:
         """Collect non-system entries from a single section into results, deduplicating via seen."""
         for entry in section.entries:
-            if entry.role != "system":
-                ident = entry.identity()
-                if ident in seen:
-                    continue
-                seen.add(ident)
-                content = entry.compile()
-                if entry.name:
-                    content = f"# {entry.name}\n{content}"
-                results.append((entry.role, content))
+            ident = entry.identity()
+            if ident in seen:
+                continue
+            # Compile first — FileEntry.compile() may update entry.role from frontmatter
+            content = entry.compile()
+            if entry.role == "system":
+                continue
+            seen.add(ident)
+            if entry.name:
+                content = f"# {entry.name}\n{content}"
+            results.append((entry.role, content))
 
     def _has_multimodal(self, exclude_roles: set[str] | None = None) -> bool:
         """Check whether any section (self or visitors) has multimodal content.
