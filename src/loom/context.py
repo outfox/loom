@@ -350,6 +350,7 @@ class Context:
         *,
         cache_breakpoints: list[str] | None = None,
         clear_volatile: bool = True,
+        cache_ttl: int | None = None,
     ) -> list[dict]:
         """
         Render the context as a list of messages for chat APIs.
@@ -372,6 +373,9 @@ class Context:
                 Example: ["foundation", "topic"] caches foundation and everything
                 up to and including topic.
             clear_volatile: If True (default), clear the step section after rendering.
+            cache_ttl: Optional TTL in seconds for Anthropic prompt cache entries.
+                When set, ``max_age_seconds`` is added to every ``cache_control``
+                block produced by *cache_breakpoints*.
 
         Returns:
             List of message dicts. Without cache_breakpoints, returns simple format:
@@ -403,7 +407,7 @@ class Context:
         if cache_breakpoints is None:
             return self._to_messages_simple(clear_volatile)
 
-        return self._to_messages_cached(cache_breakpoints, clear_volatile)
+        return self._to_messages_cached(cache_breakpoints, clear_volatile, cache_ttl)
 
     def _collect_non_system_roles(self) -> set[str]:
         """Collect all non-system roles used by entries in this context and visitors."""
@@ -545,6 +549,7 @@ class Context:
         self,
         cache_breakpoints: list[str],
         clear_volatile: bool,
+        cache_ttl: int | None = None,
     ) -> list[dict]:
         """Build messages with cache breakpoints (always block format)."""
         cache_set = {name.lower() for name in cache_breakpoints}
@@ -567,7 +572,10 @@ class Context:
 
             # Apply cache_control to the last block of this section group
             if section_name in cache_set:
-                blocks[-1] = {**blocks[-1], "cache_control": {"type": "ephemeral"}}
+                cc: dict = {"type": "ephemeral"}
+                if cache_ttl is not None:
+                    cc["max_age_seconds"] = cache_ttl
+                blocks[-1] = {**blocks[-1], "cache_control": cc}
 
             content_blocks.extend(blocks)
 

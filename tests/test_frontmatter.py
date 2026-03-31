@@ -141,6 +141,60 @@ class TestFileEntryCompile:
         entry = FileEntry(f)
         assert entry.compile() == "Line 1\nLine 2\nLine 3"
 
+    def test_compile_rereads_on_each_call(self, tmp_dir):
+        """FileEntry re-reads the file on every compile()."""
+        f = tmp_dir / "test.md"
+        f.write_text("Version 1")
+        entry = FileEntry(f)
+        assert entry.compile() == "Version 1"
+
+        f.write_text("Version 2")
+        assert entry.compile() == "Version 2"
+
+    def test_compile_rereads_frontmatter_role(self, tmp_dir):
+        """Role from frontmatter is updated on re-read."""
+        f = tmp_dir / "test.md"
+        f.write_text("---\nrole: assistant\n---\nBody")
+        entry = FileEntry(f)
+        assert entry.role == "assistant"
+
+        f.write_text("---\nrole: user\n---\nNew body")
+        entry.compile()
+        assert entry.role == "user"
+
+    def test_compile_explicit_role_not_overridden_by_reread(self, tmp_dir):
+        """Explicit role parameter is never overridden by frontmatter on re-read."""
+        f = tmp_dir / "test.md"
+        f.write_text("---\nrole: assistant\n---\nBody")
+        entry = FileEntry(f, role="system")
+        assert entry.role == "system"
+
+        f.write_text("---\nrole: user\n---\nNew body")
+        entry.compile()
+        assert entry.role == "system"
+
+    def test_compile_deleted_file(self, tmp_dir):
+        """Deleted file returns a notice instead of raising."""
+        f = tmp_dir / "test.md"
+        f.write_text("Content")
+        entry = FileEntry(f)
+        f.unlink()
+
+        result = entry.compile()
+        assert "File removed" in result
+        assert "test.md" in result
+
+    def test_compile_deleted_then_recreated(self, tmp_dir):
+        """File can be re-read after being deleted and recreated."""
+        f = tmp_dir / "test.md"
+        f.write_text("Original")
+        entry = FileEntry(f)
+        f.unlink()
+        assert "File removed" in entry.compile()
+
+        f.write_text("Recreated")
+        assert entry.compile() == "Recreated"
+
 
 class TestContextToMessagesWithRoles:
     """Tests for Context.to_messages() with non-system role entries."""

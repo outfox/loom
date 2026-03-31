@@ -1,6 +1,6 @@
 [project]
 name = "context-loom"
-version = "0.1.0"
+version = "0.2.0"
 description = "Weave context for LLM agents"
 readme = "README.md"
 license = "AGPL-3.0-or-later"

@@ -111,15 +111,22 @@ class StringEntry(Entry):
 
 
 class FileEntry(Entry):
-    """An entry backed by a file on disk."""
+    """An entry backed by a file on disk.
+
+    Re-reads the file on every ``compile()`` so edits are reflected
+    immediately.  If the file is deleted or becomes unreadable after the
+    entry is created, ``compile()`` returns a short notice instead of
+    raising.
+    """
 
     _SENTINEL = object()
 
     def __init__(self, path: str | Path, name: Optional[str] = None, role: object = _SENTINEL):
         self._path = Path(path)
-        # Read file content and parse frontmatter
-        raw = self._path.read_text(encoding="utf-8")
-        self._frontmatter, self._body = _parse_frontmatter(raw)
+        self._explicit_role = role
+
+        # Initial read — sets role from frontmatter when no explicit role given
+        self._read()
 
         # Determine role: explicit parameter > frontmatter > default "system"
         if role is not FileEntry._SENTINEL:
@@ -131,11 +138,27 @@ class FileEntry(Entry):
 
         super().__init__(name or self._path.name, role=resolved_role)
 
+    def _read(self) -> None:
+        """Read file content and parse frontmatter."""
+        raw = self._path.read_text(encoding="utf-8")
+        self._frontmatter, self._body = _parse_frontmatter(raw)
+
     @property
     def path(self) -> Path:
         return self._path
 
     def compile(self) -> str:
+        try:
+            self._read()
+        except FileNotFoundError:
+            return f"[File removed: {self._path.name}]"
+        except OSError as e:
+            return f"[File unreadable: {self._path.name} ({e})]"
+
+        # Re-resolve role from frontmatter on each read (explicit overrides still win)
+        if self._explicit_role is FileEntry._SENTINEL:
+            self.role = self._frontmatter.get("role", "system")
+
         return self._body
 
     def identity(self) -> str:
