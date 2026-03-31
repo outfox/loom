@@ -440,34 +440,33 @@ class Context:
         return roles
 
     def _collect_non_system_entries(self) -> list[tuple[str, str]]:
-        """Collect entries with non-system roles. Returns list of (role, content) tuples."""
+        """Collect deduplicated entries with non-system roles. Returns (role, content) tuples."""
         results: list[tuple[str, str]] = []
         seen: set[str] = set()
         for section in self._all_sections():
-            for entry in section.entries:
-                if entry.role != "system":
-                    ident = entry.identity()
-                    if ident in seen:
-                        continue
-                    seen.add(ident)
-                    content = entry.compile()
-                    if entry.name:
-                        content = f"# {entry.name}\n{content}"
-                    results.append((entry.role, content))
-        # Also check visitors
+            self._collect_non_system_from(section, results, seen)
         for visitor in self._visitors:
             for section in visitor._all_sections():
-                for entry in section.entries:
-                    if entry.role != "system":
-                        ident = entry.identity()
-                        if ident in seen:
-                            continue
-                        seen.add(ident)
-                        content = entry.compile()
-                        if entry.name:
-                            content = f"# {entry.name}\n{content}"
-                        results.append((entry.role, content))
+                self._collect_non_system_from(section, results, seen)
         return results
+
+    @staticmethod
+    def _collect_non_system_from(
+        section: Section,
+        results: list[tuple[str, str]],
+        seen: set[str],
+    ) -> None:
+        """Collect non-system entries from a single section into results, deduplicating via seen."""
+        for entry in section.entries:
+            if entry.role != "system":
+                ident = entry.identity()
+                if ident in seen:
+                    continue
+                seen.add(ident)
+                content = entry.compile()
+                if entry.name:
+                    content = f"# {entry.name}\n{content}"
+                results.append((entry.role, content))
 
     def _has_multimodal(self, exclude_roles: set[str] | None = None) -> bool:
         """Check whether any section (self or visitors) has multimodal content.
@@ -476,17 +475,20 @@ class Context:
             exclude_roles: If provided, ignore entries with these roles when checking.
         """
         for section in self._all_sections():
-            if section.has_multimodal_for(exclude_roles):
+            if section.has_multimodal(exclude_roles):
                 return True
         for visitor in self._visitors:
             for section in visitor._all_sections():
-                if section.has_multimodal_for(exclude_roles):
+                if section.has_multimodal(exclude_roles):
                     return True
         return False
 
-    def _compile_system_only(self, clear_volatile: bool) -> str:
+    def _compile_system_only(
+        self, clear_volatile: bool, non_system_roles: set[str] | None = None,
+    ) -> str:
         """Compile the context excluding non-system entries."""
-        non_system_roles = self._collect_non_system_roles()
+        if non_system_roles is None:
+            non_system_roles = self._collect_non_system_roles()
         if not non_system_roles:
             return self.compile(clear_volatile=clear_volatile)
         return self._compile_sections(
@@ -536,7 +538,7 @@ class Context:
         # Has non-system entries — compile system content excluding them
         non_system_roles = self._collect_non_system_roles()
         if not self._has_multimodal(exclude_roles=non_system_roles):
-            system_content = self._compile_system_only(clear_volatile=clear_volatile)
+            system_content = self._compile_system_only(clear_volatile, non_system_roles)
             messages: list[dict] = [{"role": "system", "content": system_content}]
         else:
             # Multimodal with non-system entries
@@ -646,8 +648,8 @@ class Context:
         ]
 
         # Check if any section in this group has multimodal content
-        has_multimodal = self_section.has_multimodal or any(
-            vsec.has_multimodal for _, vsec in visitor_sections
+        has_multimodal = self_section.has_multimodal(exclude_roles) or any(
+            vsec.has_multimodal(exclude_roles) for _, vsec in visitor_sections
         )
 
         if not has_multimodal:

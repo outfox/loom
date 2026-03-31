@@ -132,12 +132,12 @@ class TestSectionMultimodal:
         blocks = ctx.topic.compile_blocks()
         assert blocks == []
 
-    def test_has_multimodal_property(self):
+    def test_has_multimodal(self):
         ctx = Context("test")
-        assert ctx.topic.has_multimodal is False
+        assert ctx.topic.has_multimodal() is False
 
         ctx.topic.add(ImageEntry(FAKE_B64, FAKE_MIME))
-        assert ctx.topic.has_multimodal is True
+        assert ctx.topic.has_multimodal() is True
 
     def test_deduplication_in_compile_blocks(self):
         ctx = Context("test")

@@ -62,6 +62,11 @@ class Entry(ABC):
         """
         ...
 
+    @property
+    def is_multimodal(self) -> bool:
+        """Whether this entry carries non-text content (e.g. images)."""
+        return False
+
     def content_blocks(self) -> list[dict[str, Any]] | None:
         """
         Return multimodal content blocks for this entry, or None.
@@ -202,6 +207,10 @@ class ImageEntry(Entry):
         self._data = data
         self._media_type = media_type
         self._identity = f"image:{sha256(data.encode('ascii')).hexdigest()}"
+
+    @property
+    def is_multimodal(self) -> bool:
+        return True
 
     @property
     def data(self) -> str:
