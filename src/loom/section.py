@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from loom.entry import Entry, StringEntry, FileEntry
 
@@ -29,6 +30,11 @@ class Section:
         for entry in self.entries:
             entry.release()
         self.entries.clear()
+
+    @property
+    def has_multimodal(self) -> bool:
+        """Check whether this section contains any multimodal entries."""
+        return any(entry.content_blocks() is not None for entry in self.entries)
 
     def compile(self, seen: set[str] | None = None) -> str:
         """
@@ -67,3 +73,72 @@ class Section:
         if self.postfix:
             result += "\n" + self.postfix
         return result
+
+    def compile_blocks(
+        self,
+        seen: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """
+        Compile entries into a list of content blocks (text and/or image).
+
+        Text entries are gathered into text blocks.  Multimodal entries
+        (those whose ``content_blocks()`` returns a list) are emitted as
+        image blocks interleaved with the surrounding text.
+
+        Args:
+            seen: Set of entry identities already compiled.  Duplicates
+                are skipped.  If None, no deduplication is performed.
+
+        Returns:
+            A list of Anthropic-style content block dicts.  Returns an
+            empty list if the section has no (non-duplicate) content.
+        """
+        blocks: list[dict[str, Any]] = []
+        text_parts: list[str] = []
+        has_entries = False
+
+        def flush_text() -> None:
+            """Flush accumulated text parts into a single text block."""
+            if not text_parts:
+                return
+            blocks.append({"type": "text", "text": "\n\n".join(text_parts)})
+            text_parts.clear()
+
+        for entry in self.entries:
+            if seen is not None:
+                ident = entry.identity()
+                if ident in seen:
+                    continue
+                seen.add(ident)
+
+            has_entries = True
+            multimodal = entry.content_blocks()
+            if multimodal is not None:
+                # Flush any accumulated text before the image
+                flush_text()
+                blocks.extend(multimodal)
+            else:
+                compiled = entry.compile()
+                if entry.name:
+                    text_parts.append(f"# {entry.name}\n{compiled}")
+                else:
+                    text_parts.append(compiled)
+
+        if not has_entries:
+            return []
+
+        flush_text()
+
+        # Wrap with prefix/postfix
+        if self.prefix and blocks:
+            if blocks[0].get("type") == "text":
+                blocks[0]["text"] = self.prefix + "\n" + blocks[0]["text"]
+            else:
+                blocks.insert(0, {"type": "text", "text": self.prefix})
+        if self.postfix and blocks:
+            if blocks[-1].get("type") == "text":
+                blocks[-1]["text"] = blocks[-1]["text"] + "\n" + self.postfix
+            else:
+                blocks.append({"type": "text", "text": self.postfix})
+
+        return blocks

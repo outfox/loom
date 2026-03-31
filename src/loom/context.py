@@ -339,6 +339,10 @@ class Context:
         Returns a list suitable for OpenAI/Anthropic-style chat completions.
         Supports Anthropic's prompt caching via cache_breakpoints.
 
+        When the context contains multimodal entries (e.g. ``ImageEntry``),
+        their content blocks are emitted inline so that vision-capable
+        models can see them directly in the system prompt.
+
         Args:
             cache_breakpoints: List of section names after which to set cache
                 breakpoints. Valid names: "foundation", "focus", "topic", "convo",
@@ -350,6 +354,8 @@ class Context:
         Returns:
             List of message dicts. Without cache_breakpoints, returns simple format:
             [{"role": "system", "content": "..."}]
+            — unless the context contains multimodal entries, in which case:
+            [{"role": "system", "content": [<content blocks>]}]
 
             With cache_breakpoints, returns Anthropic's multi-block format:
             [{"role": "system", "content": [
@@ -370,82 +376,140 @@ class Context:
             messages = ctx.to_messages(cache_breakpoints=["foundation", "topic"])
         """
         if cache_breakpoints is None:
-            # Simple format - just compile everything
+            return self._to_messages_simple(clear_volatile)
+
+        return self._to_messages_cached(cache_breakpoints, clear_volatile)
+
+    def _has_multimodal(self) -> bool:
+        """Check whether any section (self or visitors) has multimodal content."""
+        for section in self._all_sections():
+            if section.has_multimodal:
+                return True
+        for visitor in self._visitors:
+            for section in visitor._all_sections():
+                if section.has_multimodal:
+                    return True
+        return False
+
+    def _to_messages_simple(self, clear_volatile: bool) -> list[dict]:
+        """Build messages without cache breakpoints."""
+        if not self._has_multimodal():
+            # Pure text — simple string content
             system_content = self.compile(clear_volatile=clear_volatile)
             return [{"role": "system", "content": system_content}]
 
-        # Multi-block format with cache breakpoints
+        # Has multimodal content — use block format
+        seen: set[str] = set()
+        all_blocks: list[dict] = []
+
+        all_blocks.extend(
+            self._compile_section_group_blocks("foundation", seen)
+        )
+        all_blocks.extend(
+            self._compile_section_group_blocks("focus", seen)
+        )
+        all_blocks.extend(
+            self._compile_section_group_blocks("topic", seen)
+        )
+        all_blocks.extend(
+            self._compile_section_group_blocks("convo", seen)
+        )
+
+        # Step: self only, no dedup
+        step_blocks = self.step.compile_blocks()
+        all_blocks.extend(step_blocks)
+
+        all_blocks.extend(
+            self._compile_section_group_blocks("attention", seen)
+        )
+
+        if clear_volatile:
+            self.step.clear()
+
+        return [{"role": "system", "content": all_blocks}]
+
+    def _to_messages_cached(
+        self,
+        cache_breakpoints: list[str],
+        clear_volatile: bool,
+    ) -> list[dict]:
+        """Build messages with cache breakpoints (always block format)."""
         cache_set = {name.lower() for name in cache_breakpoints}
         seen: set[str] = set()
         content_blocks: list[dict] = []
 
-        # Helper to add a content block
-        def add_block(text: str, section_name: str) -> None:
-            if not text.strip():
-                return
-            block: dict = {"type": "text", "text": text}
-            if section_name.lower() in cache_set:
-                block["cache_control"] = {"type": "ephemeral"}
-            content_blocks.append(block)
+        section_order = ["foundation", "focus", "topic", "convo", "step", "attention"]
 
-        # FOUNDATION: self first, then visitors
-        foundation_parts = []
-        if content := self.foundation.compile(seen):
-            foundation_parts.append(content)
-        for visitor in self._visitors:
-            if content := visitor.foundation.compile(seen):
-                foundation_parts.append(f"># {visitor.name} (visitor)\n{content}")
-        if foundation_parts:
-            add_block("\n\n".join(foundation_parts), "foundation")
+        for section_name in section_order:
+            if section_name == "step":
+                # Step: self only, no dedup
+                blocks = self.step.compile_blocks()
+            else:
+                blocks = self._compile_section_group_blocks(section_name, seen)
 
-        # FOCUS: visitors first, then self
-        focus_parts = []
-        for visitor in self._visitors:
-            if content := visitor.focus.compile(seen):
-                focus_parts.append(f"># Focus from {visitor.name}\n{content}")
-        if content := self.focus.compile(seen):
-            focus_parts.append(content)
-        if focus_parts:
-            add_block("\n\n".join(focus_parts), "focus")
+            if not blocks:
+                continue
 
-        # TOPIC: self first, then visitors
-        topic_parts = []
-        if content := self.topic.compile(seen):
-            topic_parts.append(content)
-        for visitor in self._visitors:
-            if content := visitor.topic.compile(seen):
-                topic_parts.append(f"># Topic from {visitor.name}\n{content}")
-        if topic_parts:
-            add_block("\n\n".join(topic_parts), "topic")
+            # Apply cache_control to the last block of this section group
+            if section_name in cache_set:
+                blocks[-1] = {**blocks[-1], "cache_control": {"type": "ephemeral"}}
 
-        # CONVO: visitors then self
-        convo_parts = []
-        for visitor in self._visitors:
-            if content := visitor.convo.compile(seen):
-                convo_parts.append(f"># Conversation from {visitor.name}\n{content}")
-        if content := self.convo.compile(seen):
-            convo_parts.append(content)
-        if convo_parts:
-            add_block("\n\n".join(convo_parts), "convo")
-
-        # STEP: self only
-        if content := self.step.compile():  # No dedup for step
-            add_block(content, "step")
-
-        # ATTENTION: visitors then self
-        attention_parts = []
-        for visitor in self._visitors:
-            if content := visitor.attention.compile(seen):
-                attention_parts.append(f"># Attention from {visitor.name}\n{content}")
-        if content := self.attention.compile(seen):
-            attention_parts.append(content)
-        if attention_parts:
-            add_block("\n\n".join(attention_parts), "attention")
+            content_blocks.extend(blocks)
 
         if clear_volatile:
             self.step.clear()
 
         return [{"role": "system", "content": content_blocks}]
+
+    def _compile_section_group_blocks(
+        self,
+        section_name: str,
+        seen: set[str],
+    ) -> list[dict]:
+        """
+        Compile a section group (self + visitors) into content blocks.
+
+        Follows the same ordering as compile():
+        - foundation: self first, then visitors
+        - focus: visitors first, then self
+        - topic: self first, then visitors
+        - convo: visitors first, then self
+        - attention: visitors first, then self
+        """
+        self_section: Section = getattr(self, section_name)
+        blocks: list[dict] = []
+
+        visitor_sections = [
+            (v, getattr(v, section_name)) for v in self._visitors
+        ]
+
+        # Determine order (mirrors compile())
+        if section_name == "foundation" or section_name == "topic":
+            # Self first, then visitors
+            blocks.extend(self_section.compile_blocks(seen))
+            for visitor, vsec in visitor_sections:
+                vblocks = vsec.compile_blocks(seen)
+                if vblocks:
+                    # Prefix visitor blocks with a label
+                    label = f"># {visitor.name} (visitor)" if section_name == "foundation" else f"># {section_name.title()} from {visitor.name}"
+                    vblocks.insert(0, {"type": "text", "text": label})
+                    blocks.extend(vblocks)
+        else:
+            # Visitors first, then self (focus, convo, attention)
+            for visitor, vsec in visitor_sections:
+                vblocks = vsec.compile_blocks(seen)
+                if vblocks:
+                    label_map = {
+                        "focus": f"># Focus from {visitor.name}",
+                        "convo": f"># Conversation from {visitor.name}",
+                        "attention": f"># Attention from {visitor.name}",
+                    }
+                    label = label_map.get(section_name, f"># {section_name} from {visitor.name}")
+                    vblocks.insert(0, {"type": "text", "text": label})
+                    blocks.extend(vblocks)
+            blocks.extend(self_section.compile_blocks(seen))
+
+        return blocks
 
     def __repr__(self) -> str:
         return f"Context({self.id!r}, {self.name!r}, visitors={len(self._visitors)})"
