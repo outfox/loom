@@ -74,6 +74,69 @@ class Context:
         if visitor in self._visitors:
             self._visitors.remove(visitor)
 
+    def _compile_sections(
+        self,
+        seen: set[str],
+        exclude_roles: set[str] | None = None,
+        clear_volatile: bool = True,
+    ) -> str:
+        """
+        Shared compilation logic for interleaving visitor contexts.
+
+        Args:
+            seen: Set of already-seen entry identities for deduplication.
+            exclude_roles: If provided, entries with these roles are skipped.
+            clear_volatile: If True, clear the step section after compilation.
+
+        Returns:
+            The fully compiled context string.
+        """
+        parts: list[str] = []
+
+        # FOUNDATION: self first, then visitors
+        if content := self.foundation.compile(seen, exclude_roles=exclude_roles):
+            parts.append(content)
+        for visitor in self._visitors:
+            if content := visitor.foundation.compile(seen, exclude_roles=exclude_roles):
+                parts.append(f"># {visitor.name} (visitor)\n{content}")
+
+        # FOCUS: visitors first, then self (inverted!)
+        for visitor in self._visitors:
+            if content := visitor.focus.compile(seen, exclude_roles=exclude_roles):
+                parts.append(f"># Focus from {visitor.name}\n{content}")
+        if content := self.focus.compile(seen, exclude_roles=exclude_roles):
+            parts.append(content)
+
+        # TOPIC: self first, then visitors
+        if content := self.topic.compile(seen, exclude_roles=exclude_roles):
+            parts.append(content)
+        for visitor in self._visitors:
+            if content := visitor.topic.compile(seen, exclude_roles=exclude_roles):
+                parts.append(f"># Topic from {visitor.name}\n{content}")
+
+        # CONVO: visitors (potentially compacted) then self (always full)
+        for visitor in self._visitors:
+            if content := visitor.convo.compile(seen, exclude_roles=exclude_roles):
+                parts.append(f"># Conversation from {visitor.name}\n{content}")
+        if content := self.convo.compile(seen, exclude_roles=exclude_roles):
+            parts.append(content)
+
+        # STEP: self only, always
+        if content := self.step.compile(exclude_roles=exclude_roles):  # No dedup for step
+            parts.append(content)
+
+        # ATTENTION: visitors then self
+        for visitor in self._visitors:
+            if content := visitor.attention.compile(seen, exclude_roles=exclude_roles):
+                parts.append(f"># Attention from {visitor.name}\n{content}")
+        if content := self.attention.compile(seen, exclude_roles=exclude_roles):
+            parts.append(content)
+
+        if clear_volatile:
+            self.step.clear()
+
+        return "\n\n".join(parts)
+
     def compile(self, clear_volatile: bool = True) -> str:
         """
         Compile the full context, interleaving visitor contexts.
@@ -84,52 +147,7 @@ class Context:
         Returns:
             The fully compiled context string.
         """
-        seen: set[str] = set()
-        parts: list[str] = []
-
-        # FOUNDATION: self first, then visitors
-        if content := self.foundation.compile(seen):
-            parts.append(content)
-        for visitor in self._visitors:
-            if content := visitor.foundation.compile(seen):
-                parts.append(f"># {visitor.name} (visitor)\n{content}")
-
-        # FOCUS: visitors first, then self (inverted!)
-        for visitor in self._visitors:
-            if content := visitor.focus.compile(seen):
-                parts.append(f"># Focus from {visitor.name}\n{content}")
-        if content := self.focus.compile(seen):
-            parts.append(content)
-
-        # TOPIC: self first, then visitors
-        if content := self.topic.compile(seen):
-            parts.append(content)
-        for visitor in self._visitors:
-            if content := visitor.topic.compile(seen):
-                parts.append(f"># Topic from {visitor.name}\n{content}")
-
-        # CONVO: visitors (potentially compacted) then self (always full)
-        for visitor in self._visitors:
-            if content := visitor.convo.compile(seen):
-                parts.append(f"># Conversation from {visitor.name}\n{content}")
-        if content := self.convo.compile(seen):
-            parts.append(content)
-
-        # STEP: self only, always
-        if content := self.step.compile():  # No dedup for step
-            parts.append(content)
-
-        # ATTENTION: visitors then self
-        for visitor in self._visitors:
-            if content := visitor.attention.compile(seen):
-                parts.append(f"># Attention from {visitor.name}\n{content}")
-        if content := self.attention.compile(seen):
-            parts.append(content)
-
-        if clear_volatile:
-            self.step.clear()
-
-        return "\n\n".join(parts)
+        return self._compile_sections(set(), clear_volatile=clear_volatile)
 
     def remember(self, entry: Entry | str | Path, *, summarize: bool = False) -> Entry:
         """
@@ -437,57 +455,10 @@ class Context:
         """Compile the context excluding non-system entries."""
         non_system_roles = self._collect_non_system_roles()
         if not non_system_roles:
-            # No non-system entries — use normal compile
             return self.compile(clear_volatile=clear_volatile)
-
-        # Compile with exclusion of non-system roles
-        exclude_roles = non_system_roles
-        seen: set[str] = set()
-        parts: list[str] = []
-
-        # FOUNDATION: self first, then visitors
-        if content := self.foundation.compile(seen, exclude_roles=exclude_roles):
-            parts.append(content)
-        for visitor in self._visitors:
-            if content := visitor.foundation.compile(seen, exclude_roles=exclude_roles):
-                parts.append(f"># {visitor.name} (visitor)\n{content}")
-
-        # FOCUS: visitors first, then self (inverted!)
-        for visitor in self._visitors:
-            if content := visitor.focus.compile(seen, exclude_roles=exclude_roles):
-                parts.append(f"># Focus from {visitor.name}\n{content}")
-        if content := self.focus.compile(seen, exclude_roles=exclude_roles):
-            parts.append(content)
-
-        # TOPIC: self first, then visitors
-        if content := self.topic.compile(seen, exclude_roles=exclude_roles):
-            parts.append(content)
-        for visitor in self._visitors:
-            if content := visitor.topic.compile(seen, exclude_roles=exclude_roles):
-                parts.append(f"># Topic from {visitor.name}\n{content}")
-
-        # CONVO: visitors then self
-        for visitor in self._visitors:
-            if content := visitor.convo.compile(seen, exclude_roles=exclude_roles):
-                parts.append(f"># Conversation from {visitor.name}\n{content}")
-        if content := self.convo.compile(seen, exclude_roles=exclude_roles):
-            parts.append(content)
-
-        # STEP: self only, no dedup
-        if content := self.step.compile(exclude_roles=exclude_roles):
-            parts.append(content)
-
-        # ATTENTION: visitors then self
-        for visitor in self._visitors:
-            if content := visitor.attention.compile(seen, exclude_roles=exclude_roles):
-                parts.append(f"># Attention from {visitor.name}\n{content}")
-        if content := self.attention.compile(seen, exclude_roles=exclude_roles):
-            parts.append(content)
-
-        if clear_volatile:
-            self.step.clear()
-
-        return "\n\n".join(parts)
+        return self._compile_sections(
+            set(), exclude_roles=non_system_roles, clear_volatile=clear_volatile
+        )
 
     def _to_messages_simple(self, clear_volatile: bool) -> list[dict]:
         """Build messages without cache breakpoints."""

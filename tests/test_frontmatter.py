@@ -40,12 +40,12 @@ class TestParseFrontmatter:
 
     def test_frontmatter_with_quotes(self):
         content = '---\nrole: "assistant"\n---\nBody text'
-        meta, body = _parse_frontmatter(content)
+        meta, _ = _parse_frontmatter(content)
         assert meta["role"] == "assistant"
 
     def test_frontmatter_with_single_quotes(self):
         content = "---\nrole: 'assistant'\n---\nBody text"
-        meta, body = _parse_frontmatter(content)
+        meta, _ = _parse_frontmatter(content)
         assert meta["role"] == "assistant"
 
     def test_multiple_fields(self):
@@ -62,7 +62,7 @@ class TestParseFrontmatter:
 
     def test_body_newlines_stripped(self):
         content = "---\nrole: assistant\n---\n\n\nBody with leading newlines"
-        meta, body = _parse_frontmatter(content)
+        _, body = _parse_frontmatter(content)
         assert body == "Body with leading newlines"
 
     def test_empty_frontmatter(self):

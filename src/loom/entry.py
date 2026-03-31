@@ -173,6 +173,7 @@ class ImageEntry(Entry):
         super().__init__(name, role=role)
         self._data = data
         self._media_type = media_type
+        self._identity = f"image:{sha256(data.encode('ascii')).hexdigest()}"
 
     @property
     def data(self) -> str:
@@ -207,10 +208,8 @@ class ImageEntry(Entry):
         return blocks
 
     def identity(self) -> str:
-        """Identity based on a hash of the image data (first 256 chars)."""
-        # Use a stable hash of the data prefix for deduplication
-        digest = sha256(self._data[:256].encode("ascii")).hexdigest()[:16]
-        return f"image:{digest}"
+        """Identity based on a hash of the full image data."""
+        return self._identity
 
     def __repr__(self) -> str:
         label = self.name or "unnamed"
