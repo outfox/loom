@@ -373,9 +373,9 @@ class Context:
                 Example: ["foundation", "topic"] caches foundation and everything
                 up to and including topic.
             clear_volatile: If True (default), clear the step section after rendering.
-            cache_ttl: Optional TTL in seconds for Anthropic prompt cache entries.
-                When set, ``max_age_seconds`` is added to every ``cache_control``
-                block produced by *cache_breakpoints*.
+            cache_ttl: Optional TTL in seconds for Anthropic's prompt cache
+                (``max_age_seconds``). When set, each ``cache_control`` block
+                includes ``{"type": "ephemeral", "max_age_seconds": cache_ttl}``.
 
         Returns:
             List of message dicts. Without cache_breakpoints, returns simple format:
@@ -559,6 +559,27 @@ class Context:
         content_blocks: list[dict] = []
 
         section_order = ["foundation", "focus", "topic", "convo", "step", "attention"]
+        # Helper to add a content block
+        def add_block(text: str, section_name: str) -> None:
+            if not text.strip():
+                return
+            block: dict = {"type": "text", "text": text}
+            if section_name.lower() in cache_set:
+                cc: dict = {"type": "ephemeral"}
+                if cache_ttl is not None:
+                    cc["max_age_seconds"] = cache_ttl
+                block["cache_control"] = cc
+            content_blocks.append(block)
+
+        # FOUNDATION: self first, then visitors
+        foundation_parts = []
+        if content := self.foundation.compile(seen):
+            foundation_parts.append(content)
+        for visitor in self._visitors:
+            if content := visitor.foundation.compile(seen):
+                foundation_parts.append(f"># {visitor.name} (visitor)\n{content}")
+        if foundation_parts:
+            add_block("\n\n".join(foundation_parts), "foundation")
 
         for section_name in section_order:
             if section_name == "step":
