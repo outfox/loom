@@ -36,19 +36,25 @@ class Section:
         """Check whether this section contains any multimodal entries."""
         return any(entry.content_blocks() is not None for entry in self.entries)
 
-    def compile(self, seen: set[str] | None = None) -> str:
+    def compile(self, seen: set[str] | None = None, exclude_roles: set[str] | None = None) -> str:
         """
         Compile all entries, optionally deduplicating against seen identities.
 
         Args:
             seen: Set of entry identities already compiled. Duplicates are skipped.
                   If None, no deduplication is performed.
+            exclude_roles: Set of role names to exclude from compilation.
+                  If None, all entries are included.
 
         Returns:
             Compiled string with prefix/postfix if section has content.
         """
         parts: list[str] = []
         for entry in self.entries:
+            # Skip entries with excluded roles
+            if exclude_roles and entry.role in exclude_roles:
+                continue
+
             # Only perform deduplication if seen is provided
             if seen is not None:
                 identity = entry.identity()
@@ -77,6 +83,7 @@ class Section:
     def compile_blocks(
         self,
         seen: set[str] | None = None,
+        exclude_roles: set[str] | None = None,
     ) -> list[dict[str, Any]]:
         """
         Compile entries into a list of content blocks (text and/or image).
@@ -88,6 +95,8 @@ class Section:
         Args:
             seen: Set of entry identities already compiled.  Duplicates
                 are skipped.  If None, no deduplication is performed.
+            exclude_roles: Set of role names to exclude from compilation.
+                  If None, all entries are included.
 
         Returns:
             A list of Anthropic-style content block dicts.  Returns an
@@ -105,6 +114,10 @@ class Section:
             text_parts.clear()
 
         for entry in self.entries:
+            # Skip entries with excluded roles
+            if exclude_roles and entry.role in exclude_roles:
+                continue
+
             if seen is not None:
                 ident = entry.identity()
                 if ident in seen:

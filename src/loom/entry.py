@@ -16,16 +16,36 @@ from typing import Any, Optional
 from loom.ids import create_entry_id, release_id
 
 
+def _parse_frontmatter(content: str) -> tuple[dict[str, str], str]:
+    """Parse YAML frontmatter from content. Returns (metadata, body)."""
+    if not content.startswith("---"):
+        return {}, content
+    end = content.find("---", 3)
+    if end == -1:
+        return {}, content
+    front = content[3:end].strip()
+    body = content[end + 3:].lstrip("\n")
+    meta = {}
+    for line in front.splitlines():
+        if ":" in line:
+            key, _, value = line.partition(":")
+            meta[key.strip()] = value.strip().strip('"').strip("'")
+    return meta, body
+
+
 class Entry(ABC):
     """Base class for context entries."""
 
-    def __init__(self, name: Optional[str] = None):
+    def __init__(self, name: Optional[str] = None, role: str = "system"):
         """
         Args:
             name: Human-readable identifier for this entry.
                   Used for deduplication and section headers.
+            role: Message role for this entry (e.g. "system", "assistant").
+                  Defaults to "system".
         """
         self.name = name
+        self.role = role
         self.id = create_entry_id()
         self.created_at = datetime.now(timezone.utc)
 
@@ -74,8 +94,8 @@ class Entry(ABC):
 class StringEntry(Entry):
     """An entry backed by a plain string."""
 
-    def __init__(self, content: str, name: Optional[str] = None):
-        super().__init__(name)
+    def __init__(self, content: str, name: Optional[str] = None, role: str = "system"):
+        super().__init__(name, role=role)
         self._content = content
 
     def compile(self) -> str:
@@ -93,16 +113,30 @@ class StringEntry(Entry):
 class FileEntry(Entry):
     """An entry backed by a file on disk."""
 
-    def __init__(self, path: str | Path, name: Optional[str] = None):
+    _SENTINEL = object()
+
+    def __init__(self, path: str | Path, name: Optional[str] = None, role: object = _SENTINEL):
         self._path = Path(path)
-        super().__init__(name or self._path.name)
+        # Read file content and parse frontmatter
+        raw = self._path.read_text(encoding="utf-8")
+        self._frontmatter, self._body = _parse_frontmatter(raw)
+
+        # Determine role: explicit parameter > frontmatter > default "system"
+        if role is not FileEntry._SENTINEL:
+            resolved_role = role  # type: ignore[assignment]
+        elif "role" in self._frontmatter:
+            resolved_role = self._frontmatter["role"]
+        else:
+            resolved_role = "system"
+
+        super().__init__(name or self._path.name, role=resolved_role)
 
     @property
     def path(self) -> Path:
         return self._path
 
     def compile(self) -> str:
-        return self._path.read_text(encoding="utf-8")
+        return self._body
 
     def identity(self) -> str:
         # For files, identity is the resolved path
@@ -127,14 +161,16 @@ class ImageEntry(Entry):
         data: str,
         media_type: str,
         name: Optional[str] = None,
+        role: str = "system",
     ):
         """
         Args:
             data: Base64-encoded image data.
             media_type: MIME type (e.g. "image/jpeg", "image/png").
             name: Human-readable label for the image.
+            role: Message role for this entry. Defaults to "system".
         """
-        super().__init__(name)
+        super().__init__(name, role=role)
         self._data = data
         self._media_type = media_type
 

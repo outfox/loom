@@ -343,6 +343,10 @@ class Context:
         their content blocks are emitted inline so that vision-capable
         models can see them directly in the system prompt.
 
+        Entries with a non-system role (e.g. ``role="assistant"``) are
+        emitted as separate messages after the system message but before
+        any conversation history.
+
         Args:
             cache_breakpoints: List of section names after which to set cache
                 breakpoints. Valid names: "foundation", "focus", "topic", "convo",
@@ -364,6 +368,9 @@ class Context:
                 ...
             ]}]
 
+            Non-system entries are emitted as additional messages after the
+            system message.
+
         Example:
             ctx = Context("main")
             ctx.foundation.add(StringEntry("You are Blue, a helpful AI."))
@@ -380,6 +387,41 @@ class Context:
 
         return self._to_messages_cached(cache_breakpoints, clear_volatile)
 
+    def _collect_non_system_roles(self) -> set[str]:
+        """Collect all non-system roles used by entries in this context and visitors."""
+        roles: set[str] = set()
+        for section in self._all_sections():
+            for entry in section.entries:
+                if entry.role != "system":
+                    roles.add(entry.role)
+        for visitor in self._visitors:
+            for section in visitor._all_sections():
+                for entry in section.entries:
+                    if entry.role != "system":
+                        roles.add(entry.role)
+        return roles
+
+    def _collect_non_system_entries(self) -> list[tuple[str, str]]:
+        """Collect entries with non-system roles. Returns list of (role, content) tuples."""
+        results = []
+        for section in self._all_sections():
+            for entry in section.entries:
+                if entry.role != "system":
+                    content = entry.compile()
+                    if entry.name:
+                        content = f"# {entry.name}\n{content}"
+                    results.append((entry.role, content))
+        # Also check visitors
+        for visitor in self._visitors:
+            for section in visitor._all_sections():
+                for entry in section.entries:
+                    if entry.role != "system":
+                        content = entry.compile()
+                        if entry.name:
+                            content = f"# {entry.name}\n{content}"
+                        results.append((entry.role, content))
+        return results
+
     def _has_multimodal(self) -> bool:
         """Check whether any section (self or visitors) has multimodal content."""
         for section in self._all_sections():
@@ -391,42 +433,142 @@ class Context:
                     return True
         return False
 
-    def _to_messages_simple(self, clear_volatile: bool) -> list[dict]:
-        """Build messages without cache breakpoints."""
-        if not self._has_multimodal():
-            # Pure text — simple string content
-            system_content = self.compile(clear_volatile=clear_volatile)
-            return [{"role": "system", "content": system_content}]
+    def _compile_system_only(self, clear_volatile: bool) -> str:
+        """Compile the context excluding non-system entries."""
+        non_system_roles = self._collect_non_system_roles()
+        if not non_system_roles:
+            # No non-system entries — use normal compile
+            return self.compile(clear_volatile=clear_volatile)
 
-        # Has multimodal content — use block format
+        # Compile with exclusion of non-system roles
+        exclude_roles = non_system_roles
         seen: set[str] = set()
-        all_blocks: list[dict] = []
+        parts: list[str] = []
 
-        all_blocks.extend(
-            self._compile_section_group_blocks("foundation", seen)
-        )
-        all_blocks.extend(
-            self._compile_section_group_blocks("focus", seen)
-        )
-        all_blocks.extend(
-            self._compile_section_group_blocks("topic", seen)
-        )
-        all_blocks.extend(
-            self._compile_section_group_blocks("convo", seen)
-        )
+        # FOUNDATION: self first, then visitors
+        if content := self.foundation.compile(seen, exclude_roles=exclude_roles):
+            parts.append(content)
+        for visitor in self._visitors:
+            if content := visitor.foundation.compile(seen, exclude_roles=exclude_roles):
+                parts.append(f"># {visitor.name} (visitor)\n{content}")
 
-        # Step: self only, no dedup
-        step_blocks = self.step.compile_blocks()
-        all_blocks.extend(step_blocks)
+        # FOCUS: visitors first, then self (inverted!)
+        for visitor in self._visitors:
+            if content := visitor.focus.compile(seen, exclude_roles=exclude_roles):
+                parts.append(f"># Focus from {visitor.name}\n{content}")
+        if content := self.focus.compile(seen, exclude_roles=exclude_roles):
+            parts.append(content)
 
-        all_blocks.extend(
-            self._compile_section_group_blocks("attention", seen)
-        )
+        # TOPIC: self first, then visitors
+        if content := self.topic.compile(seen, exclude_roles=exclude_roles):
+            parts.append(content)
+        for visitor in self._visitors:
+            if content := visitor.topic.compile(seen, exclude_roles=exclude_roles):
+                parts.append(f"># Topic from {visitor.name}\n{content}")
+
+        # CONVO: visitors then self
+        for visitor in self._visitors:
+            if content := visitor.convo.compile(seen, exclude_roles=exclude_roles):
+                parts.append(f"># Conversation from {visitor.name}\n{content}")
+        if content := self.convo.compile(seen, exclude_roles=exclude_roles):
+            parts.append(content)
+
+        # STEP: self only, no dedup
+        if content := self.step.compile(exclude_roles=exclude_roles):
+            parts.append(content)
+
+        # ATTENTION: visitors then self
+        for visitor in self._visitors:
+            if content := visitor.attention.compile(seen, exclude_roles=exclude_roles):
+                parts.append(f"># Attention from {visitor.name}\n{content}")
+        if content := self.attention.compile(seen, exclude_roles=exclude_roles):
+            parts.append(content)
 
         if clear_volatile:
             self.step.clear()
 
-        return [{"role": "system", "content": all_blocks}]
+        return "\n\n".join(parts)
+
+    def _to_messages_simple(self, clear_volatile: bool) -> list[dict]:
+        """Build messages without cache breakpoints."""
+        non_system_entries = self._collect_non_system_entries()
+
+        if not non_system_entries:
+            # No non-system entries — original behavior
+            if not self._has_multimodal():
+                system_content = self.compile(clear_volatile=clear_volatile)
+                return [{"role": "system", "content": system_content}]
+
+            # Has multimodal content — use block format
+            seen: set[str] = set()
+            all_blocks: list[dict] = []
+
+            all_blocks.extend(
+                self._compile_section_group_blocks("foundation", seen)
+            )
+            all_blocks.extend(
+                self._compile_section_group_blocks("focus", seen)
+            )
+            all_blocks.extend(
+                self._compile_section_group_blocks("topic", seen)
+            )
+            all_blocks.extend(
+                self._compile_section_group_blocks("convo", seen)
+            )
+
+            # Step: self only, no dedup
+            step_blocks = self.step.compile_blocks()
+            all_blocks.extend(step_blocks)
+
+            all_blocks.extend(
+                self._compile_section_group_blocks("attention", seen)
+            )
+
+            if clear_volatile:
+                self.step.clear()
+
+            return [{"role": "system", "content": all_blocks}]
+
+        # Has non-system entries — compile system content excluding them
+        if not self._has_multimodal():
+            system_content = self._compile_system_only(clear_volatile=clear_volatile)
+            messages: list[dict] = [{"role": "system", "content": system_content}]
+        else:
+            # Multimodal with non-system entries
+            non_system_roles = self._collect_non_system_roles()
+            seen = set()
+            all_blocks = []
+
+            all_blocks.extend(
+                self._compile_section_group_blocks("foundation", seen, exclude_roles=non_system_roles)
+            )
+            all_blocks.extend(
+                self._compile_section_group_blocks("focus", seen, exclude_roles=non_system_roles)
+            )
+            all_blocks.extend(
+                self._compile_section_group_blocks("topic", seen, exclude_roles=non_system_roles)
+            )
+            all_blocks.extend(
+                self._compile_section_group_blocks("convo", seen, exclude_roles=non_system_roles)
+            )
+
+            step_blocks = self.step.compile_blocks(exclude_roles=non_system_roles)
+            all_blocks.extend(step_blocks)
+
+            all_blocks.extend(
+                self._compile_section_group_blocks("attention", seen, exclude_roles=non_system_roles)
+            )
+
+            if clear_volatile:
+                self.step.clear()
+
+            messages = [{"role": "system", "content": all_blocks}]
+
+        # Add non-system entries as separate messages
+        for role, content in non_system_entries:
+            messages.append({"role": role, "content": content})
+
+        return messages
 
     def _to_messages_cached(
         self,
@@ -435,6 +577,8 @@ class Context:
     ) -> list[dict]:
         """Build messages with cache breakpoints (always block format)."""
         cache_set = {name.lower() for name in cache_breakpoints}
+        non_system_entries = self._collect_non_system_entries()
+        non_system_roles = self._collect_non_system_roles() if non_system_entries else None
         seen: set[str] = set()
         content_blocks: list[dict] = []
 
@@ -443,9 +587,9 @@ class Context:
         for section_name in section_order:
             if section_name == "step":
                 # Step: self only, no dedup
-                blocks = self.step.compile_blocks()
+                blocks = self.step.compile_blocks(exclude_roles=non_system_roles)
             else:
-                blocks = self._compile_section_group_blocks(section_name, seen)
+                blocks = self._compile_section_group_blocks(section_name, seen, exclude_roles=non_system_roles)
 
             if not blocks:
                 continue
@@ -459,15 +603,26 @@ class Context:
         if clear_volatile:
             self.step.clear()
 
-        return [{"role": "system", "content": content_blocks}]
+        messages: list[dict] = [{"role": "system", "content": content_blocks}]
+
+        # Add non-system entries as separate messages
+        for role, content in non_system_entries:
+            messages.append({"role": role, "content": content})
+
+        return messages
 
     def _compile_section_group_blocks(
         self,
         section_name: str,
         seen: set[str],
+        exclude_roles: set[str] | None = None,
     ) -> list[dict]:
         """
         Compile a section group (self + visitors) into content blocks.
+
+        For pure-text sections, all content (self + visitors) is merged into
+        a single text block — matching the behavior of compile().  Multimodal
+        entries (images) are emitted as separate blocks interleaved with text.
 
         Follows the same ordering as compile():
         - foundation: self first, then visitors
@@ -477,27 +632,63 @@ class Context:
         - attention: visitors first, then self
         """
         self_section: Section = getattr(self, section_name)
-        blocks: list[dict] = []
 
         visitor_sections = [
             (v, getattr(v, section_name)) for v in self._visitors
         ]
 
-        # Determine order (mirrors compile())
-        if section_name == "foundation" or section_name == "topic":
+        # Check if any section in this group has multimodal content
+        has_multimodal = self_section.has_multimodal or any(
+            vsec.has_multimodal for _, vsec in visitor_sections
+        )
+
+        if not has_multimodal:
+            # Pure text — use compile() to merge into a single string, then wrap as one block
+            # This matches the original behavior where all parts are joined with "\n\n"
+            parts: list[str] = []
+
+            if section_name in ("foundation", "topic"):
+                # Self first, then visitors
+                if content := self_section.compile(seen, exclude_roles=exclude_roles):
+                    parts.append(content)
+                for visitor, vsec in visitor_sections:
+                    if content := vsec.compile(seen, exclude_roles=exclude_roles):
+                        label = f"># {visitor.name} (visitor)" if section_name == "foundation" else f"># Topic from {visitor.name}"
+                        parts.append(f"{label}\n{content}")
+            else:
+                # Visitors first, then self (focus, convo, attention)
+                for visitor, vsec in visitor_sections:
+                    if content := vsec.compile(seen, exclude_roles=exclude_roles):
+                        label_map = {
+                            "focus": f"># Focus from {visitor.name}",
+                            "convo": f"># Conversation from {visitor.name}",
+                            "attention": f"># Attention from {visitor.name}",
+                        }
+                        label = label_map.get(section_name, f"># {section_name} from {visitor.name}")
+                        parts.append(f"{label}\n{content}")
+                if content := self_section.compile(seen, exclude_roles=exclude_roles):
+                    parts.append(content)
+
+            if not parts:
+                return []
+            return [{"type": "text", "text": "\n\n".join(parts)}]
+
+        # Has multimodal content — use compile_blocks() and interleave
+        blocks: list[dict] = []
+
+        if section_name in ("foundation", "topic"):
             # Self first, then visitors
-            blocks.extend(self_section.compile_blocks(seen))
+            blocks.extend(self_section.compile_blocks(seen, exclude_roles=exclude_roles))
             for visitor, vsec in visitor_sections:
-                vblocks = vsec.compile_blocks(seen)
+                vblocks = vsec.compile_blocks(seen, exclude_roles=exclude_roles)
                 if vblocks:
-                    # Prefix visitor blocks with a label
-                    label = f"># {visitor.name} (visitor)" if section_name == "foundation" else f"># {section_name.title()} from {visitor.name}"
+                    label = f"># {visitor.name} (visitor)" if section_name == "foundation" else f"># Topic from {visitor.name}"
                     vblocks.insert(0, {"type": "text", "text": label})
                     blocks.extend(vblocks)
         else:
             # Visitors first, then self (focus, convo, attention)
             for visitor, vsec in visitor_sections:
-                vblocks = vsec.compile_blocks(seen)
+                vblocks = vsec.compile_blocks(seen, exclude_roles=exclude_roles)
                 if vblocks:
                     label_map = {
                         "focus": f"># Focus from {visitor.name}",
@@ -507,7 +698,7 @@ class Context:
                     label = label_map.get(section_name, f"># {section_name} from {visitor.name}")
                     vblocks.insert(0, {"type": "text", "text": label})
                     blocks.extend(vblocks)
-            blocks.extend(self_section.compile_blocks(seen))
+            blocks.extend(self_section.compile_blocks(seen, exclude_roles=exclude_roles))
 
         return blocks
 
