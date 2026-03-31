@@ -74,6 +74,20 @@ class Context:
         if visitor in self._visitors:
             self._visitors.remove(visitor)
 
+    @staticmethod
+    def _visitor_label(section_name: str, visitor_name: str) -> str:
+        """Return the visitor prefix label for a given section."""
+        if section_name == "foundation":
+            return f"># {visitor_name} (visitor)"
+        labels = {
+            "focus": "Focus",
+            "topic": "Topic",
+            "convo": "Conversation",
+            "attention": "Attention",
+        }
+        word = labels.get(section_name, section_name)
+        return f"># {word} from {visitor_name}"
+
     def _compile_sections(
         self,
         seen: set[str],
@@ -93,17 +107,19 @@ class Context:
         """
         parts: list[str] = []
 
+        label = self._visitor_label
+
         # FOUNDATION: self first, then visitors
         if content := self.foundation.compile(seen, exclude_roles=exclude_roles):
             parts.append(content)
         for visitor in self._visitors:
             if content := visitor.foundation.compile(seen, exclude_roles=exclude_roles):
-                parts.append(f"># {visitor.name} (visitor)\n{content}")
+                parts.append(f"{label('foundation', visitor.name)}\n{content}")
 
         # FOCUS: visitors first, then self (inverted!)
         for visitor in self._visitors:
             if content := visitor.focus.compile(seen, exclude_roles=exclude_roles):
-                parts.append(f"># Focus from {visitor.name}\n{content}")
+                parts.append(f"{label('focus', visitor.name)}\n{content}")
         if content := self.focus.compile(seen, exclude_roles=exclude_roles):
             parts.append(content)
 
@@ -112,12 +128,12 @@ class Context:
             parts.append(content)
         for visitor in self._visitors:
             if content := visitor.topic.compile(seen, exclude_roles=exclude_roles):
-                parts.append(f"># Topic from {visitor.name}\n{content}")
+                parts.append(f"{label('topic', visitor.name)}\n{content}")
 
         # CONVO: visitors (potentially compacted) then self (always full)
         for visitor in self._visitors:
             if content := visitor.convo.compile(seen, exclude_roles=exclude_roles):
-                parts.append(f"># Conversation from {visitor.name}\n{content}")
+                parts.append(f"{label('convo', visitor.name)}\n{content}")
         if content := self.convo.compile(seen, exclude_roles=exclude_roles):
             parts.append(content)
 
@@ -128,7 +144,7 @@ class Context:
         # ATTENTION: visitors then self
         for visitor in self._visitors:
             if content := visitor.attention.compile(seen, exclude_roles=exclude_roles):
-                parts.append(f"># Attention from {visitor.name}\n{content}")
+                parts.append(f"{label('attention', visitor.name)}\n{content}")
         if content := self.attention.compile(seen, exclude_roles=exclude_roles):
             parts.append(content)
 
@@ -653,19 +669,12 @@ class Context:
                     parts.append(content)
                 for visitor, vsec in visitor_sections:
                     if content := vsec.compile(seen, exclude_roles=exclude_roles):
-                        label = f"># {visitor.name} (visitor)" if section_name == "foundation" else f"># Topic from {visitor.name}"
-                        parts.append(f"{label}\n{content}")
+                        parts.append(f"{self._visitor_label(section_name, visitor.name)}\n{content}")
             else:
                 # Visitors first, then self (focus, convo, attention)
                 for visitor, vsec in visitor_sections:
                     if content := vsec.compile(seen, exclude_roles=exclude_roles):
-                        label_map = {
-                            "focus": f"># Focus from {visitor.name}",
-                            "convo": f"># Conversation from {visitor.name}",
-                            "attention": f"># Attention from {visitor.name}",
-                        }
-                        label = label_map.get(section_name, f"># {section_name} from {visitor.name}")
-                        parts.append(f"{label}\n{content}")
+                        parts.append(f"{self._visitor_label(section_name, visitor.name)}\n{content}")
                 if content := self_section.compile(seen, exclude_roles=exclude_roles):
                     parts.append(content)
 
@@ -682,21 +691,14 @@ class Context:
             for visitor, vsec in visitor_sections:
                 vblocks = vsec.compile_blocks(seen, exclude_roles=exclude_roles)
                 if vblocks:
-                    label = f"># {visitor.name} (visitor)" if section_name == "foundation" else f"># Topic from {visitor.name}"
-                    vblocks.insert(0, {"type": "text", "text": label})
+                    vblocks.insert(0, {"type": "text", "text": self._visitor_label(section_name, visitor.name)})
                     blocks.extend(vblocks)
         else:
             # Visitors first, then self (focus, convo, attention)
             for visitor, vsec in visitor_sections:
                 vblocks = vsec.compile_blocks(seen, exclude_roles=exclude_roles)
                 if vblocks:
-                    label_map = {
-                        "focus": f"># Focus from {visitor.name}",
-                        "convo": f"># Conversation from {visitor.name}",
-                        "attention": f"># Attention from {visitor.name}",
-                    }
-                    label = label_map.get(section_name, f"># {section_name} from {visitor.name}")
-                    vblocks.insert(0, {"type": "text", "text": label})
+                    vblocks.insert(0, {"type": "text", "text": self._visitor_label(section_name, visitor.name)})
                     blocks.extend(vblocks)
             blocks.extend(self_section.compile_blocks(seen, exclude_roles=exclude_roles))
 

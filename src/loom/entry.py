@@ -124,9 +124,14 @@ class FileEntry(Entry):
     def __init__(self, path: str | Path, name: Optional[str] = None, role: object = _SENTINEL):
         self._path = Path(path)
         self._explicit_role = role
+        self._frontmatter: dict[str, str] = {}
+        self._body: str = ""
 
         # Initial read — sets role from frontmatter when no explicit role given
-        self._read()
+        try:
+            self._read()
+        except (FileNotFoundError, OSError):
+            pass  # File will be read on first compile()
 
         # Determine role: explicit parameter > frontmatter > default "system"
         if role is not FileEntry._SENTINEL:
