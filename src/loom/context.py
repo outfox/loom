@@ -532,9 +532,17 @@ class Context:
 
         messages: list[dict] = [{"role": "system", "content": all_blocks}]
 
-        # Add non-system entries as separate messages
-        for role, content in non_system_entries:
-            messages.append({"role": role, "content": content})
+        # Add non-system entries grouped by role (block format)
+        if non_system_entries:
+            grouped: list[tuple[str, list[dict]]] = []
+            for role, content in non_system_entries:
+                block: dict = {"type": "text", "text": content}
+                if grouped and grouped[-1][0] == role:
+                    grouped[-1][1].append(block)
+                else:
+                    grouped.append((role, [block]))
+            for role, blocks in grouped:
+                messages.append({"role": role, "content": blocks})
 
         return messages
 
@@ -578,22 +586,27 @@ class Context:
 
         messages: list[dict] = [{"role": "system", "content": content_blocks}]
 
-        # Add non-system entries as separate messages
-        # Cache breakpoint on the last one so the entire preamble is cached
+        # Add non-system entries grouped by role, each as a block-format message.
+        # Cache breakpoint on the last block of the last message.
         if non_system_entries:
             cc_ns: dict = {"type": "ephemeral"}
             if cache_ttl is not None:
                 cc_ns["max_age_seconds"] = cache_ttl
 
-            for i, (role, content) in enumerate(non_system_entries):
-                if i == len(non_system_entries) - 1:
-                    # Last entry — use block format for cache_control
-                    messages.append({
-                        "role": role,
-                        "content": [{"type": "text", "text": content, "cache_control": cc_ns}],
-                    })
+            # Group consecutive entries by role
+            grouped: list[tuple[str, list[dict]]] = []
+            for role, content in non_system_entries:
+                block: dict = {"type": "text", "text": content}
+                if grouped and grouped[-1][0] == role:
+                    grouped[-1][1].append(block)
                 else:
-                    messages.append({"role": role, "content": content})
+                    grouped.append((role, [block]))
+
+            # Cache breakpoint on the very last block
+            grouped[-1][1][-1]["cache_control"] = cc_ns
+
+            for role, blocks in grouped:
+                messages.append({"role": role, "content": blocks})
 
         return messages
 

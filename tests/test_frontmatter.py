@@ -209,7 +209,9 @@ class TestContextToMessagesWithRoles:
         assert len(messages) == 2
         assert messages[0]["role"] == "system"
         assert messages[1]["role"] == "assistant"
-        assert "Some assistant prefill" in messages[1]["content"]
+        content = messages[1]["content"]
+        assert isinstance(content, list)
+        assert any("Some assistant prefill" in b.get("text", "") for b in content)
 
     def test_assistant_entry_excluded_from_system_message(self):
         ctx = Context("test")
@@ -231,12 +233,15 @@ class TestContextToMessagesWithRoles:
 
         messages = ctx.to_messages()
 
-        assert len(messages) == 3
+        # Same-role entries are grouped into one message
+        assert len(messages) == 2
         assert messages[0]["role"] == "system"
         assert messages[1]["role"] == "assistant"
-        assert messages[2]["role"] == "assistant"
-        assert "First assistant msg" in messages[1]["content"]
-        assert "Second assistant msg" in messages[2]["content"]
+        content = messages[1]["content"]
+        assert isinstance(content, list)
+        texts = [b.get("text", "") for b in content]
+        assert any("First assistant msg" in t for t in texts)
+        assert any("Second assistant msg" in t for t in texts)
 
     def test_no_non_system_entries_backward_compat(self):
         """When no non-system entries exist, behavior is unchanged."""
@@ -288,9 +293,12 @@ class TestContextToMessagesWithRoles:
         assert len(messages) == 2
         assert messages[0]["role"] == "system"
         assert messages[1]["role"] == "assistant"
-        assert "I'll help you with that." in messages[1]["content"]
+        content = messages[1]["content"]
+        assert isinstance(content, list)
+        texts = " ".join(b.get("text", "") for b in content)
+        assert "I'll help you with that." in texts
         # Frontmatter should be stripped from compiled content
-        assert "---" not in messages[1]["content"]
+        assert "---" not in texts
 
     def test_named_non_system_entry_gets_header(self):
         """Non-system entries with names get # headers in their message."""
@@ -301,8 +309,9 @@ class TestContextToMessagesWithRoles:
         messages = ctx.to_messages()
 
         assert len(messages) == 2
-        assert "# Prefill" in messages[1]["content"]
-        assert "Prefill content" in messages[1]["content"]
+        texts = " ".join(b.get("text", "") for b in messages[1]["content"])
+        assert "# Prefill" in texts
+        assert "Prefill content" in texts
 
     def test_to_messages_with_cache_breakpoints_and_roles(self):
         """Cache breakpoints work correctly with non-system role entries."""
@@ -368,7 +377,8 @@ class TestContextToMessagesWithRoles:
         assert len(messages) == 2
         assert messages[0]["role"] == "system"
         assert messages[1]["role"] == "assistant"
-        assert "Visitor assistant msg" in messages[1]["content"]
+        texts = " ".join(b.get("text", "") for b in messages[1]["content"])
+        assert "Visitor assistant msg" in texts
 
     def test_clear_volatile_with_roles(self):
         """Step section clearing works correctly with role entries."""
