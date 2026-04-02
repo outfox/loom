@@ -108,7 +108,8 @@ class TestToMessages:
         messages = ctx.to_messages()
         
         assert messages[0]["role"] == "system"
-        assert "System prompt content" in messages[0]["content"]
+        sys_texts = " ".join(b["text"] for b in messages[0]["content"])
+        assert "System prompt content" in sys_texts
 
     def test_to_messages_empty_context(self):
         """Empty context returns system message with empty content."""
@@ -118,7 +119,7 @@ class TestToMessages:
         
         assert len(messages) == 1
         assert messages[0]["role"] == "system"
-        assert messages[0]["content"] == ""
+        assert messages[0]["content"] == []
 
     def test_to_messages_clears_volatile(self):
         """to_messages() clears step section by default."""
@@ -126,10 +127,12 @@ class TestToMessages:
         ctx.step.add(StringEntry("Volatile"))
         
         messages1 = ctx.to_messages()
-        assert "Volatile" in messages1[0]["content"]
-        
+        texts1 = " ".join(b["text"] for b in messages1[0]["content"])
+        assert "Volatile" in texts1
+
         messages2 = ctx.to_messages()
-        assert "Volatile" not in messages2[0]["content"]
+        texts2 = " ".join(b["text"] for b in messages2[0]["content"]) if messages2[0]["content"] else ""
+        assert "Volatile" not in texts2
 
     def test_to_messages_openai_compatible(self):
         """Output is compatible with OpenAI chat API format."""
@@ -139,9 +142,9 @@ class TestToMessages:
         
         messages = ctx.to_messages()
         
-        # OpenAI expects: [{"role": "...", "content": "..."}]
+        # Content is now always a list of blocks
         for msg in messages:
             assert "role" in msg
             assert "content" in msg
             assert isinstance(msg["role"], str)
-            assert isinstance(msg["content"], str)
+            assert isinstance(msg["content"], list)

@@ -163,7 +163,8 @@ class TestContextMultimodalMessages:
         messages = ctx.to_messages()
 
         assert len(messages) == 1
-        assert isinstance(messages[0]["content"], str)
+        assert isinstance(messages[0]["content"], list)
+        assert all(b["type"] == "text" for b in messages[0]["content"])
 
     def test_with_image_returns_block_format(self):
         """With images, to_messages() returns block format."""

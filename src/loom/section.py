@@ -107,15 +107,7 @@ class Section:
             empty list if the section has no (non-duplicate) content.
         """
         blocks: list[dict[str, Any]] = []
-        text_parts: list[str] = []
         has_entries = False
-
-        def flush_text() -> None:
-            """Flush accumulated text parts into a single text block."""
-            if not text_parts:
-                return
-            blocks.append({"type": "text", "text": "\n\n".join(text_parts)})
-            text_parts.clear()
 
         for entry in self.entries:
             # Skip entries with excluded roles
@@ -131,20 +123,16 @@ class Section:
             has_entries = True
             multimodal = entry.content_blocks()
             if multimodal is not None:
-                # Flush any accumulated text before the image
-                flush_text()
                 blocks.extend(multimodal)
             else:
                 compiled = entry.compile()
                 if entry.name:
-                    text_parts.append(f"# {entry.name}\n{compiled}")
+                    blocks.append({"type": "text", "text": f"# {entry.name}\n{compiled}"})
                 else:
-                    text_parts.append(compiled)
+                    blocks.append({"type": "text", "text": compiled})
 
         if not has_entries:
             return []
-
-        flush_text()
 
         # Wrap with prefix/postfix
         if self.prefix and blocks:

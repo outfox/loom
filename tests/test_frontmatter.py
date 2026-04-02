@@ -219,8 +219,9 @@ class TestContextToMessagesWithRoles:
         messages = ctx.to_messages()
 
         # System message should NOT contain assistant content
-        assert "Assistant prefill" not in messages[0]["content"]
-        assert "System content" in messages[0]["content"]
+        sys_texts = " ".join(b["text"] for b in messages[0]["content"])
+        assert "Assistant prefill" not in sys_texts
+        assert "System content" in sys_texts
 
     def test_multiple_non_system_entries(self):
         ctx = Context("test")
@@ -247,8 +248,9 @@ class TestContextToMessagesWithRoles:
 
         assert len(messages) == 1
         assert messages[0]["role"] == "system"
-        assert "You are helpful." in messages[0]["content"]
-        assert "Current task" in messages[0]["content"]
+        texts = " ".join(b["text"] for b in messages[0]["content"])
+        assert "You are helpful." in texts
+        assert "Current task" in texts
 
     def test_render_includes_all_entries_regardless_of_role(self):
         """render() should include ALL entries, even non-system ones (backward compat)."""

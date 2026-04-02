@@ -500,77 +500,24 @@ class Context:
     def _to_messages_simple(self, clear_volatile: bool) -> list[dict]:
         """Build messages without cache breakpoints."""
         non_system_entries = self._collect_non_system_entries()
+        non_system_roles = self._collect_non_system_roles() if non_system_entries else None
 
-        if not non_system_entries:
-            # No non-system entries — original behavior
-            if not self._has_multimodal():
-                system_content = self.compile(clear_volatile=clear_volatile)
-                return [{"role": "system", "content": system_content}]
+        seen: set[str] = set()
+        all_blocks: list[dict] = []
 
-            # Has multimodal content — use block format
-            seen: set[str] = set()
-            all_blocks: list[dict] = []
+        section_order = ["foundation", "focus", "topic", "convo", "step", "attention"]
+        for section_name in section_order:
+            if section_name == "step":
+                all_blocks.extend(self.step.compile_blocks(exclude_roles=non_system_roles))
+            else:
+                all_blocks.extend(
+                    self._compile_section_group_blocks(section_name, seen, exclude_roles=non_system_roles)
+                )
 
-            all_blocks.extend(
-                self._compile_section_group_blocks("foundation", seen)
-            )
-            all_blocks.extend(
-                self._compile_section_group_blocks("focus", seen)
-            )
-            all_blocks.extend(
-                self._compile_section_group_blocks("topic", seen)
-            )
-            all_blocks.extend(
-                self._compile_section_group_blocks("convo", seen)
-            )
+        if clear_volatile:
+            self.step.clear()
 
-            # Step: self only, no dedup
-            step_blocks = self.step.compile_blocks()
-            all_blocks.extend(step_blocks)
-
-            all_blocks.extend(
-                self._compile_section_group_blocks("attention", seen)
-            )
-
-            if clear_volatile:
-                self.step.clear()
-
-            return [{"role": "system", "content": all_blocks}]
-
-        # Has non-system entries — compile system content excluding them
-        non_system_roles = self._collect_non_system_roles()
-        if not self._has_multimodal(exclude_roles=non_system_roles):
-            system_content = self._compile_system_only(clear_volatile, non_system_roles)
-            messages: list[dict] = [{"role": "system", "content": system_content}]
-        else:
-            # Multimodal with non-system entries
-            seen = set()
-            all_blocks = []
-
-            all_blocks.extend(
-                self._compile_section_group_blocks("foundation", seen, exclude_roles=non_system_roles)
-            )
-            all_blocks.extend(
-                self._compile_section_group_blocks("focus", seen, exclude_roles=non_system_roles)
-            )
-            all_blocks.extend(
-                self._compile_section_group_blocks("topic", seen, exclude_roles=non_system_roles)
-            )
-            all_blocks.extend(
-                self._compile_section_group_blocks("convo", seen, exclude_roles=non_system_roles)
-            )
-
-            step_blocks = self.step.compile_blocks(exclude_roles=non_system_roles)
-            all_blocks.extend(step_blocks)
-
-            all_blocks.extend(
-                self._compile_section_group_blocks("attention", seen, exclude_roles=non_system_roles)
-            )
-
-            if clear_volatile:
-                self.step.clear()
-
-            messages = [{"role": "system", "content": all_blocks}]
+        messages: list[dict] = [{"role": "system", "content": all_blocks}]
 
         # Add non-system entries as separate messages
         for role, content in non_system_entries:
@@ -632,9 +579,8 @@ class Context:
         """
         Compile a section group (self + visitors) into content blocks.
 
-        For pure-text sections, all content (self + visitors) is merged into
-        a single text block — matching the behavior of compile().  Multimodal
-        entries (images) are emitted as separate blocks interleaved with text.
+        Each entry is emitted as its own content block, giving LLMs cleaner
+        context boundaries between prompt sections.
 
         Follows the same ordering as compile():
         - foundation: self first, then visitors
@@ -649,36 +595,6 @@ class Context:
             (v, getattr(v, section_name)) for v in self._visitors
         ]
 
-        # Check if any section in this group has multimodal content
-        has_multimodal = self_section.has_multimodal(exclude_roles) or any(
-            vsec.has_multimodal(exclude_roles) for _, vsec in visitor_sections
-        )
-
-        if not has_multimodal:
-            # Pure text — use compile() to merge into a single string, then wrap as one block
-            # This matches the original behavior where all parts are joined with "\n\n"
-            parts: list[str] = []
-
-            if section_name in ("foundation", "topic"):
-                # Self first, then visitors
-                if content := self_section.compile(seen, exclude_roles=exclude_roles):
-                    parts.append(content)
-                for visitor, vsec in visitor_sections:
-                    if content := vsec.compile(seen, exclude_roles=exclude_roles):
-                        parts.append(f"{self._visitor_label(section_name, visitor.name)}\n{content}")
-            else:
-                # Visitors first, then self (focus, convo, attention)
-                for visitor, vsec in visitor_sections:
-                    if content := vsec.compile(seen, exclude_roles=exclude_roles):
-                        parts.append(f"{self._visitor_label(section_name, visitor.name)}\n{content}")
-                if content := self_section.compile(seen, exclude_roles=exclude_roles):
-                    parts.append(content)
-
-            if not parts:
-                return []
-            return [{"type": "text", "text": "\n\n".join(parts)}]
-
-        # Has multimodal content — use compile_blocks() and interleave
         blocks: list[dict] = []
 
         if section_name in ("foundation", "topic"):

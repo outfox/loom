@@ -24,9 +24,10 @@ class TestCacheBreakpoints:
 
         assert len(messages) == 1
         assert messages[0]["role"] == "system"
-        assert isinstance(messages[0]["content"], str)
-        assert "You are helpful." in messages[0]["content"]
-        assert "Current task." in messages[0]["content"]
+        assert isinstance(messages[0]["content"], list)
+        texts = " ".join(b["text"] for b in messages[0]["content"])
+        assert "You are helpful." in texts
+        assert "Current task." in texts
 
     def test_to_messages_with_breakpoints(self):
         """With cache_breakpoints, returns multi-block format."""
@@ -134,7 +135,8 @@ class TestCacheBreakpoints:
         messages = main.to_messages(cache_breakpoints=["foundation"])
         content = messages[0]["content"]
 
-        foundation_block = content[0]
-        assert "Main foundation." in foundation_block["text"]
-        assert "Visitor foundation." in foundation_block["text"]
-        assert foundation_block.get("cache_control") == {"type": "ephemeral"}
+        all_text = " ".join(b["text"] for b in content)
+        assert "Main foundation." in all_text
+        assert "Visitor foundation." in all_text
+        # cache_control should be on the last foundation-related block
+        assert any(b.get("cache_control") == {"type": "ephemeral"} for b in content)
