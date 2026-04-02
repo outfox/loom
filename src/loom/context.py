@@ -565,8 +565,21 @@ class Context:
         messages: list[dict] = [{"role": "system", "content": content_blocks}]
 
         # Add non-system entries as separate messages
-        for role, content in non_system_entries:
-            messages.append({"role": role, "content": content})
+        # Cache breakpoint on the last one so the entire preamble is cached
+        if non_system_entries:
+            cc_ns: dict = {"type": "ephemeral"}
+            if cache_ttl is not None:
+                cc_ns["max_age_seconds"] = cache_ttl
+
+            for i, (role, content) in enumerate(non_system_entries):
+                if i == len(non_system_entries) - 1:
+                    # Last entry — use block format for cache_control
+                    messages.append({
+                        "role": role,
+                        "content": [{"type": "text", "text": content, "cache_control": cc_ns}],
+                    })
+                else:
+                    messages.append({"role": role, "content": content})
 
         return messages
 

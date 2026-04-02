@@ -317,9 +317,12 @@ class TestContextToMessagesWithRoles:
         assert messages[0]["role"] == "system"
         assert isinstance(messages[0]["content"], list)
 
-        # Assistant message comes after
+        # Assistant message comes after, with cache breakpoint
         assert messages[-1]["role"] == "assistant"
-        assert "Assistant msg" in messages[-1]["content"]
+        last_content = messages[-1]["content"]
+        assert isinstance(last_content, list)
+        assert any("Assistant msg" in b.get("text", "") for b in last_content)
+        assert any("cache_control" in b for b in last_content)
 
         # System blocks should NOT contain assistant content
         for block in messages[0]["content"]:
