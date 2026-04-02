@@ -367,6 +367,7 @@ class Context:
         cache_breakpoints: list[str] | None = None,
         clear_volatile: bool = True,
         cache_ttl: int | None = None,
+        sections: list[str] | None = None,
     ) -> list[dict]:
         """
         Render the context as a list of messages for chat APIs.
@@ -392,11 +393,12 @@ class Context:
             cache_ttl: Optional TTL in seconds for Anthropic's prompt cache
                 (``max_age_seconds``). When set, each ``cache_control`` block
                 includes ``{"type": "ephemeral", "max_age_seconds": cache_ttl}``.
+            sections: If provided, only include these sections (by name) in the
+                output. Defaults to all sections. Useful for excluding volatile
+                sections (step, attention) that the caller handles separately.
 
         Returns:
             List of message dicts. Without cache_breakpoints, returns simple format:
-            [{"role": "system", "content": "..."}]
-            — unless the context contains multimodal entries, in which case:
             [{"role": "system", "content": [<content blocks>]}]
 
             With cache_breakpoints, returns Anthropic's multi-block format:
@@ -419,11 +421,21 @@ class Context:
 
             # With caching (Anthropic-optimized)
             messages = ctx.to_messages(cache_breakpoints=["foundation", "topic"])
-        """
-        if cache_breakpoints is None:
-            return self._to_messages_simple(clear_volatile)
 
-        return self._to_messages_cached(cache_breakpoints, clear_volatile, cache_ttl)
+            # Exclude volatile sections
+            messages = ctx.to_messages(
+                cache_breakpoints=["foundation", "topic"],
+                sections=["foundation", "focus", "topic", "convo"],
+            )
+        """
+        section_order = sections or ["foundation", "focus", "topic", "convo", "step", "attention"]
+
+        if cache_breakpoints is None:
+            return self._to_messages_simple(clear_volatile, section_order)
+
+        return self._to_messages_cached(
+            cache_breakpoints, clear_volatile, cache_ttl, section_order
+        )
 
     def _collect_non_system_roles(self) -> set[str]:
         """Collect all non-system roles used by entries in this context and visitors."""
@@ -497,7 +509,9 @@ class Context:
             set(), exclude_roles=non_system_roles, clear_volatile=clear_volatile
         )
 
-    def _to_messages_simple(self, clear_volatile: bool) -> list[dict]:
+    def _to_messages_simple(
+        self, clear_volatile: bool, section_order: list[str],
+    ) -> list[dict]:
         """Build messages without cache breakpoints."""
         non_system_entries = self._collect_non_system_entries()
         non_system_roles = self._collect_non_system_roles() if non_system_entries else None
@@ -505,7 +519,6 @@ class Context:
         seen: set[str] = set()
         all_blocks: list[dict] = []
 
-        section_order = ["foundation", "focus", "topic", "convo", "step", "attention"]
         for section_name in section_order:
             if section_name == "step":
                 all_blocks.extend(self.step.compile_blocks(exclude_roles=non_system_roles))
@@ -530,15 +543,16 @@ class Context:
         cache_breakpoints: list[str],
         clear_volatile: bool,
         cache_ttl: int | None = None,
+        section_order: list[str] | None = None,
     ) -> list[dict]:
         """Build messages with cache breakpoints (always block format)."""
+        if section_order is None:
+            section_order = ["foundation", "focus", "topic", "convo", "step", "attention"]
         cache_set = {name.lower() for name in cache_breakpoints}
         non_system_entries = self._collect_non_system_entries()
         non_system_roles = self._collect_non_system_roles() if non_system_entries else None
         seen: set[str] = set()
         content_blocks: list[dict] = []
-
-        section_order = ["foundation", "focus", "topic", "convo", "step", "attention"]
 
         for section_name in section_order:
             if section_name == "step":
