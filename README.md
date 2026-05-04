@@ -1,5 +1,7 @@
 ![loom logo](logo-loom.png)
 
+# LOOM
+
 A Python library for composing, interleaving, and compiling context from multiple sources into coherent prompts.
 
 ## Installation
