@@ -1,10 +1,10 @@
 # 🧵 loom
 
-![loom logo](logo-loom.png)
-
 *Weave context for LLM agents*
 
 A Python library for composing, interleaving, and compiling context from multiple sources into coherent prompts.
+
+![loom logo](logo-loom.png)
 
 ## Installation
 
